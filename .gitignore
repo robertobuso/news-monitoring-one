@@ -2,6 +2,9 @@
 .env
 backend/.env
 frontend/.env
+backend/venv_news/
+venv_news/
+venv/
 
 # Python cache and virtual environments
 __pycache__/
