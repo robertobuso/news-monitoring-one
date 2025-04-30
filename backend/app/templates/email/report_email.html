@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewsMonitor Daily Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background-color: #0056b3;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px 5px 0 0;
+        }
+        .content {
+            padding: 20px;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #eee;
+        }
+        .button {
+            display: inline-block;
+            background-color: #0056b3;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>NewsMonitor Daily Report</h1>
+        </div>
+        <div class="content">
+            <p>Hello,</p>
+            <p>Your daily news report for <strong>{{client_name}}</strong> is ready.</p>
+            
+            <div class="info">
+                <p><strong>Report Date:</strong> {{report_date}}</p>
+                <p>This report contains the most relevant news articles for your profile, along with an executive summary of key insights.</p>
+            </div>
+            
+            <p>You can view the report online by clicking the button below:</p>
+            <p style="text-align: center;">
+                <a href="{{view_url}}" class="button">View Report</a>
+            </p>
+            
+            <p>The report is also attached to this email as a PDF for your convenience.</p>
+            
+            <p>Thank you for using NewsMonitor!</p>
+        </div>
+        <div class="footer">
+            <p>© 2023 NewsMonitor. All rights reserved.</p>
+            <p>If you have any questions, please contact our support team.</p>
+        </div>
+    </div>
+</body>
+</html>
