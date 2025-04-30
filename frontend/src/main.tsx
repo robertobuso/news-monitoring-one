@@ -7,6 +7,7 @@ import { Toaster } from 'react-hot-toast';
 
 import App from './App';
 import './index.css';
+import { AuthProvider } from './app/providers/AuthProvider';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -23,8 +24,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <App />
-        <Toaster position="top-right" />
+        <AuthProvider> {/* ✅ Move it here */}
+          <App />
+          <Toaster position="top-right" />
+        </AuthProvider>
       </BrowserRouter>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>

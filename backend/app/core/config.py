@@ -5,6 +5,7 @@ Uses pydantic-settings for environment variable loading and validation.
 from typing import List, Optional, Union
 from pydantic import AnyHttpUrl, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Any, Optional
 
 
 class Settings(BaseSettings):
@@ -51,15 +52,16 @@ class Settings(BaseSettings):
         """Assemble database URI from components."""
         if isinstance(v, str):
             return v
-        
+
         return PostgresDsn.build(
             scheme="postgresql+asyncpg",
             username=values.data.get("POSTGRES_USER"),
             password=values.data.get("POSTGRES_PASSWORD"),
             host=values.data.get("POSTGRES_SERVER"),
-            port=values.data.get("POSTGRES_PORT"),
-            path=f"{values.data.get('POSTGRES_DB') or ''}",
+            port=int(values.data.get("POSTGRES_PORT")),
+            path=f"{values.data.get('POSTGRES_DB', '')}"
         )
+
     
     @field_validator("CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:

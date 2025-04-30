@@ -2,11 +2,13 @@
 Base models and imports for SQLAlchemy models.
 This file is used by Alembic for migrations.
 """
-from sqlalchemy.ext.declarative import declarative_base
+
 from sqlalchemy.ext.asyncio import AsyncAttrs
+from sqlalchemy.orm import DeclarativeBase
 
-# Create declarative base for SQLAlchemy models
-Base = declarative_base(cls=AsyncAttrs)
+class Base(AsyncAttrs, DeclarativeBase):
+    pass
 
-# Import all models here for Alembic to discover
-from app.models.user import User  # noqa
+def load_models():
+    from app.models import user  # ← late import avoids circular issue
+    # Import all models to register them with Base.metadata
