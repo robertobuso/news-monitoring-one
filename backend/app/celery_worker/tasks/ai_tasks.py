@@ -39,33 +39,44 @@ def process_article_relevance_task(article_id: str):
     asyncio.run(_process_article())
 
 
-@shared_task(name="process_new_articles")
-def process_new_articles():
+@shared_task(name="process_new_articles", bind=True, max_retries=3)
+def process_new_articles(self):
     """
     Process all unprocessed articles for relevance.
+    Finds articles without any relevance records and processes them.
     """
     logger.info("Starting processing of new articles")
     
     async def _process_articles():
-        async with AsyncSessionLocal() as db:
-            article_repo = ArticleRepository(db)
-            
-            # Get unprocessed articles
-            unprocessed_articles = await article_repo.get_unprocessed_articles(limit=50)
-            
-            logger.info(f"Found {len(unprocessed_articles)} unprocessed articles")
-            
-            # Queue individual article processing
-            for article in unprocessed_articles:
-                process_article_relevance_task.delay(str(article.id))
-                logger.info(f"Queued article {article.id} for processing")
+        total_processed = 0
+        try:
+            async with AsyncSessionLocal() as db:
+                article_repo = ArticleRepository(db)
+                relevance_repo = ArticleRelevanceRepository(db)
+                
+                # Get unprocessed articles - those without any relevance records
+                unprocessed_articles = await relevance_repo.get_unprocessed_articles(limit=50)
+                
+                logger.info(f"Found {len(unprocessed_articles)} unprocessed articles")
+                
+                # Queue individual article processing
+                for article in unprocessed_articles:
+                    process_article_relevance_task.delay(str(article.id))
+                    logger.info(f"Queued article {article.id} for processing")
+                    total_processed += 1
+                    
+            return total_processed
+        except Exception as e:
+            logger.error(f"Error processing new articles: {e}")
+            self.retry(exc=e, countdown=60)  # Retry after 60 seconds
+            return 0
     
     # Run the async function
     import asyncio
-    asyncio.run(_process_articles())
+    count = asyncio.run(_process_articles())
     
-    logger.info("Completed queueing of new articles for processing")
-
+    logger.info(f"Completed queueing of {count} new articles for processing")
+    return {"processed_count": count}
 
 @shared_task(name="generate_article_summaries")
 def generate_article_summaries(article_ids: list):

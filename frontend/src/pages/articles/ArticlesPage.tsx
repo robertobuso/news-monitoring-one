@@ -24,28 +24,20 @@ const ArticlesPage: React.FC = () => {
   const dateTo = searchParams.get('dateTo') || undefined;
   const feedId = searchParams.get('feedId') || undefined; // Add if filtering by feed on this page
 
-  // --- REMOVE MOCK DATA ---
-  // const mockArticles = [...];
-  // const mockClients = [...];
-  // const mockSources = [...];
-
   // Fetch real data
-  const { data: articles, isLoading, refetch } = useQuery<ArticleType[]>({ // Use actual type
-    // Query key includes all dependencies that should trigger a refetch
+  const { data: articles, isLoading } = useQuery({
     queryKey: ['articles', search, feedId, source, dateFrom, dateTo],
     queryFn: () => {
       console.log('Fetching articles with filters:', { search, feedId, source, dateFrom, dateTo });
-      // Construct params object for API call
-      const apiParams: any = { limit: 20 }; // Add default limit or pagination state
+      const apiParams: any = { limit: 20 }; // Use a reasonable default limit that the server accepts
       if (search) apiParams.search = search;
-      if (feedId) apiParams.feed_id = feedId; // Match backend param name
+      if (feedId) apiParams.feed_id = feedId;
       if (source) apiParams.source = source;
-      if (dateFrom) apiParams.date_from = dateFrom; // Match backend param name
-      if (dateTo) apiParams.date_to = dateTo; // Match backend param name
-
-      return api.articles.getAll(apiParams); // Use the actual API client
+      if (dateFrom) apiParams.date_from = dateFrom;
+      if (dateTo) apiParams.date_to = dateTo;
+  
+      return api.articles.getAll(apiParams);
     }
-    // Consider adding options like keepPreviousData: true for better UX during filter changes
   });
 
   // Fetch clients and sources if needed for filter dropdowns (replace mocks)
@@ -55,16 +47,14 @@ const ArticlesPage: React.FC = () => {
    });
 
    const { data: sources } = useQuery({
-     queryKey: ['articleSources'],
-     queryFn: async () => {
-       // You might need a dedicated backend endpoint for unique sources
-       // or derive it from fetched articles (less efficient)
-       // For now, maybe hardcode or fetch from a config endpoint
-       const fetchedArticles = await api.articles.getAll({ limit: 1000 }); // Example: Fetch more to get sources
-       const uniqueSources = Array.from(new Set(fetchedArticles.map(a => a.source)));
-       return uniqueSources;
-     }
-   });
+    queryKey: ['articleSources'],
+    queryFn: async () => {
+      // Get the stats which already has the sources information
+      const sourceStats = await api.articleStats.getSourceCounts();
+      // Extract just the source names
+      return sourceStats.map(stat => stat.source);
+    }
+  });
 
 
   // Update URL search parameters when filters change

@@ -16,105 +16,41 @@ const ReportDetailPage: React.FC = () => {
   const [showSendModal, setShowSendModal] = useState(false);
   const [email, setEmail] = useState('');
 
-  // Mock report data
-  const mockReport = {
-    id: id || '1',
-    client_id: '1',
-    client_name: 'Tech Company',
-    report_date: '2025-04-30T00:00:00.000Z',
-    created_at: '2025-04-30T12:00:00.000Z',
-    sent_at: '2025-04-30T12:05:00.000Z',
-    status: 'sent',
-    recipient_email: 'client@example.com',
-    pdf_path: '/reports/tech_report_20250430.pdf',
-    executive_summary: `
-      This weekly report highlights key developments in the tech industry that may impact your business. 
-      There was significant news around AI regulations, with new guidelines proposed by the EU. 
-      Several major tech companies announced quarterly earnings that exceeded expectations, 
-      indicating strong market performance despite economic concerns. 
-      Your competitors have made progress in cloud computing solutions, with announcements of new 
-      features that may require strategic response. We recommend focusing on your AI ethics 
-      initiatives as a market differentiator given the increasing regulatory scrutiny.
-    `,
-    articles: [
-      {
-        id: '1',
-        title: 'New AI Regulations Proposed by EU Commission',
-        source: 'Tech News',
-        published_at: new Date('2025-04-28T10:00:00.000Z'),
-        relevance_score: 0.92,
-        summary: 'The European Commission has proposed new regulations for AI systems, focusing on transparency and ethical use. This could impact global tech companies operating in European markets.'
-      },
-      {
-        id: '2',
-        title: 'Tech Giants Report Strong Quarterly Earnings',
-        source: 'Finance Daily',
-        published_at: new Date('2025-04-27T14:30:00.000Z'),
-        relevance_score: 0.85,
-        summary: 'Major tech companies reported earnings exceeding analyst expectations, with particularly strong performance in cloud services and AI applications.'
-      },
-      {
-        id: '3',
-        title: 'Advancements in Quantum Computing Show Promise',
-        source: 'Science Today',
-        published_at: new Date('2025-04-26T09:15:00.000Z'),
-        relevance_score: 0.78,
-        summary: 'Recent breakthroughs in quantum computing could accelerate development timelines, potentially bringing practical applications to market sooner than expected.'
-      },
-      {
-        id: '4',
-        title: 'Competitors Launch New Cloud Features',
-        source: 'Business Insider',
-        published_at: new Date('2025-04-25T11:45:00.000Z'),
-        relevance_score: 0.89,
-        summary: 'Your key competitors have announced new features for their cloud platforms, focusing on enhanced security and integration capabilities.'
-      },
-      {
-        id: '5',
-        title: 'AI Ethics Becoming Key Market Differentiator',
-        source: 'Marketing Weekly',
-        published_at: new Date('2025-04-24T16:20:00.000Z'),
-        relevance_score: 0.81,
-        summary: 'Companies with strong AI ethics policies are seeing improved customer trust and brand perception, according to a new market research study.'
-      }
-    ]
-  };
-
-  // Mock API calls
   const { data: report, isLoading } = useQuery({
     queryKey: ['report', id],
-    queryFn: () => {
-      console.log('Fetching report with id:', id);
-      return Promise.resolve(mockReport);
-    },
+    queryFn: () => api.reports.getById(id as string),
     enabled: !!id
   });
 
   const sendReportMutation = useMutation({
     mutationFn: (data: { reportId: string; email: string }) => {
-      console.log('Sending report:', data);
-      return Promise.resolve(data);
+      return api.reports.sendEmail(data.reportId, data.email);
     },
     onSuccess: () => {
       toast.success('Report sent successfully');
       setShowSendModal(false);
+      // Refresh report data to update the status
+      queryClient.invalidateQueries({ queryKey: ['report', id] });
     },
-    onError: () => {
-      toast.error('Failed to send report');
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to send report');
     }
   });
-
+  
   const duplicateReportMutation = useMutation({
     mutationFn: (reportId: string) => {
-      console.log('Duplicating report:', reportId);
-      return Promise.resolve({ id: 'new-report-id' });
+      // This would need a proper API endpoint for duplicating a report
+      // Since it doesn't exist in the current API, we can create it or 
+      // simplify by generating a new report with the same parameters
+      return api.reports.generate(report.client_id, report.report_date);
     },
     onSuccess: (data) => {
-      toast.success('Report duplicated successfully');
-      navigate(`/reports/${data.id}`);
+      toast.success('Report duplicate generation started');
+      // Navigate to reports page to see the new report
+      navigate('/reports');
     },
-    onError: () => {
-      toast.error('Failed to duplicate report');
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to duplicate report');
     }
   });
 

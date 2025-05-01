@@ -297,3 +297,63 @@ async def generate_executive_summary(
         )
     
     return result
+
+@router.get("/{article_id}/relevance", status_code=status.HTTP_200_OK)
+async def get_article_relevance_by_clients(
+    article_id: uuid.UUID,
+    min_score: float = Query(0.0, ge=0.0, le=1.0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get client profiles with relevance scores for a specific article.
+    
+    Args:
+        article_id: Article ID
+        min_score: Minimum relevance score filter
+        db: Database session
+        current_user: Current authenticated user
+        
+    Returns:
+        dict: Client relevance results
+    """
+    # Verify article exists
+    article_repo = ArticleRepository(db)
+    article = await article_repo.get(id=article_id)
+    
+    if not article:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Article not found"
+        )
+    
+    # Get relevances for this article
+    relevance_repo = ArticleRelevanceRepository(db)
+    client_repo = ClientProfileRepository(db)
+    
+    # We need to query relevances for this article
+    # and join with client profiles to get the client names
+    relevances = []
+    
+    # This would be more efficient with a SQL join, but let's use the existing repos
+    article_relevances = await relevance_repo.get_by_article_id(article_id, min_score)
+    
+    for relevance in article_relevances:
+        client = await client_repo.get(id=relevance.client_id)
+        if client:
+            relevances.append({
+                "client_id": str(client.id),
+                "client_name": client.name,
+                "score": relevance.relevance_score,
+                "summary": relevance.summary,
+                "is_included": relevance.is_included
+            })
+    
+    # Sort by relevance score descending
+    relevances.sort(key=lambda x: x["score"], reverse=True)
+    
+    return {
+        "success": True,
+        "article_id": str(article_id),
+        "relevances": relevances
+    }

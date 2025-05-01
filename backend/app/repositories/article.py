@@ -135,6 +135,33 @@ class ArticleRepository(BaseRepository[Article, ArticleCreate, ArticleUpdate]):
         result = await self.db.execute(query)
         return result.scalars().all(), total_count
     
+    async def get_by_article_id(
+        self, 
+        article_id: uuid.UUID,
+        min_score: float = 0.0
+    ) -> List[ArticleRelevance]:
+        """
+        Get article relevances for a specific article.
+        
+        Args:
+            article_id: Article ID
+            min_score: Minimum relevance score
+            
+        Returns:
+            List[ArticleRelevance]: List of article relevances
+        """
+        query = select(ArticleRelevance).where(
+            and_(
+                ArticleRelevance.article_id == article_id,
+                ArticleRelevance.relevance_score >= min_score
+            )
+        ).order_by(
+            ArticleRelevance.relevance_score.desc()
+        )
+        
+        result = await self.db.execute(query)
+        return result.scalars().all()
+    
 class ArticleRelevanceRepository:
     """
     Repository for ArticleRelevance model operations.
@@ -272,15 +299,18 @@ class ArticleRelevanceRepository:
         Get articles that haven't been processed for relevance yet.
         
         Args:
-            limit: Maximum number of articles to return
+            limit: Maximum number of articles to return (default: 50, max: 100)
             
         Returns:
             List[Article]: List of unprocessed articles
         """
+        # Ensure we don't exceed server limits
+        if limit > 100:
+            limit = 100
+            
         # Find articles that don't have any relevance records
         # This requires a LEFT JOIN with article_relevances
         from sqlalchemy import outerjoin, func
-        from app.models.article_relevance import ArticleRelevance
         
         query = select(Article).outerjoin(
             ArticleRelevance, 
@@ -289,6 +319,8 @@ class ArticleRelevanceRepository:
             Article.id
         ).having(
             func.count(ArticleRelevance.id) == 0
+        ).order_by(
+            Article.published_at.desc()  # Get newest articles first
         ).limit(limit)
         
         result = await self.db.execute(query)

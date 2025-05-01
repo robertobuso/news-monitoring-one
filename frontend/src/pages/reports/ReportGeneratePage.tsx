@@ -10,13 +10,6 @@ const ReportGeneratePage: React.FC = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Mock clients data
-  const mockClients = [
-    { id: '1', name: 'Tech Company' },
-    { id: '2', name: 'Finance Corp' },
-    { id: '3', name: 'Green Energy Startup' }
-  ];
-
   const { data: clients, isLoading: isLoadingClients } = useQuery({
     queryKey: ['clients'],
     queryFn: () => api.clientProfiles.getAll()
@@ -24,12 +17,16 @@ const ReportGeneratePage: React.FC = () => {
   
   const generateReportMutation = useMutation({
     mutationFn: (data: { client_id: string; report_date?: string; send_email?: boolean; recipient_email?: string }) => {
-      const apiData = {
-        client_id: data.client_id,
-        report_date: data.report_date,
-        recipient_email: data.send_email ? data.recipient_email : undefined
-      };
-      return api.reports.generate(data.client_id, data.report_date, data.send_email ? data.recipient_email : undefined);
+      // First generate the report
+      return api.reports.generate(data.client_id, data.report_date).then(result => {
+        // If send_email is true, also send an email
+        if (data.send_email && data.recipient_email && result.task_id) {
+          // This assumes there's an endpoint to associate an email with a report task
+          // If not, we might need to wait for the report to be ready before sending
+          return api.reports.sendEmail(result.task_id, data.recipient_email).then(() => result);
+        }
+        return result;
+      });
     },
     onSuccess: (data) => {
       toast.success('Report generation started');

@@ -12,8 +12,8 @@ from app.repositories.report import ReportRepository # Import repository
 
 logger = logging.getLogger(__name__)
 
-@shared_task(name="generate_report", bind=True, max_retries=3, default_retry_delay=60) # Add bind=True, retries
-def generate_report_task(self, client_id_str: str, report_date_iso: str | None = None): # Add self
+@shared_task(name="generate_report", bind=True, max_retries=3, default_retry_delay=60)
+def generate_report_task(self, client_id_str: str, report_date_iso: str | None = None):
     """
     Generate a report for a client.
 
@@ -32,15 +32,53 @@ def generate_report_task(self, client_id_str: str, report_date_iso: str | None =
         nonlocal report_id_for_error_update # Allow modification
         async with AsyncSessionLocal() as db:
             report_service = ReportService(db)
-            report_repo = ReportRepository(db) # Instantiate repo
+            report_repo = ReportRepository(db)
+            client_repo = ClientProfileRepository(db)
 
             try:
-                # --- Main Service Call ---
+                # First, verify the client exists
+                client_profile = await client_repo.get(id=client_id)
+                if not client_profile:
+                    logger.error(f"Client profile not found: {client_id}")
+                    return {"error": "Client profile not found"}
+                
+                # Check if we already have relevant articles for this client
+                relevance_repo = ArticleRelevanceRepository(db)
+                
+                # Get date range - looking for articles from the previous day by default
+                report_date_obj = report_date or date.today()
+                start_date = datetime.combine(report_date_obj - timedelta(days=1), time.min)
+                end_date = datetime.combine(report_date_obj, time.min)
+                
+                relevances = await relevance_repo.get_by_client_id_and_date_range(
+                    client_id=client_id,
+                    date_from=start_date,
+                    date_to=end_date,
+                    min_score=0.6  # Threshold for inclusion
+                )
+                
+                # If no relevances, trigger relevance calculation for recent articles
+                if not relevances:
+                    logger.info(f"No relevant articles found for client {client_id}. Triggering relevance calculation.")
+                    
+                    # Get recent articles from the date range
+                    article_repo = ArticleRepository(db)
+                    articles, _ = await article_repo.get_multi(
+                        filters={"date_from": start_date, "date_to": end_date},
+                        limit=50
+                    )
+                    
+                    # Process each article for relevance
+                    ai_service = AIService(db)
+                    for article in articles:
+                        await ai_service.process_article(article.id)
+                        logger.info(f"Processed article {article.id} for client {client_id}")
+                
+                # Now generate the report
                 result = await report_service.generate_daily_report(
                     client_id=client_id,
-                    report_date=report_date
+                    report_date=report_date_obj
                 )
-                # -----------------------
 
                 # Store report ID if the service method returned one
                 if result.get("report") and hasattr(result["report"], "id"):
@@ -72,23 +110,18 @@ def generate_report_task(self, client_id_str: str, report_date_iso: str | None =
                     except Exception as update_err:
                         logger.error(f"Failed to update report status to error after exception: {update_err}")
                         await db.rollback() # Rollback if status update failed
-                else:
-                     # If error happened before report record was created, just log
-                     pass
-                # Re-raise the exception to mark the Celery task as failed
-                # Or use self.retry(exc=e) to retry the task
-                raise # Or self.retry(exc=e)
+                
+                # Re-raise to trigger task retry
+                raise
 
     try:
         # Run the async function
         return asyncio.run(_generate_report_async())
     except Exception as task_exc:
-         # Catch exception raised from _generate_report_async if needed
-         # Celery will mark the task as FAILED due to the unhandled exception
-         logger.error(f"Celery task failed for client {client_id} after running async part: {task_exc}")
-         # Depending on retry logic, this might not be reached if self.retry is used
-         return {"error": f"Task execution failed: {task_exc}"}
-
+        # Retry the task
+        logger.error(f"Celery task failed for client {client_id}: {task_exc}")
+        self.retry(exc=task_exc)
+        return {"error": f"Task execution failed: {task_exc}"}
 
 @shared_task(name="generate_all_daily_reports")
 def generate_all_daily_reports_task():

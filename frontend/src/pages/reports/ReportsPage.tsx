@@ -17,72 +17,6 @@ const ReportsPage: React.FC = () => {
   const dateTo = searchParams.get('dateTo');
   const status = searchParams.get('status');
 
-  // Mock data for reports
-  const mockReports = [
-    {
-      id: '1',
-      client_id: '1',
-      client_name: 'Tech Company',
-      report_date: '2025-04-30T00:00:00.000Z',
-      created_at: '2025-04-30T12:00:00.000Z',
-      sent_at: '2025-04-30T12:05:00.000Z',
-      status: 'sent',
-      recipient_email: 'client@example.com',
-      pdf_path: '/reports/tech_report_20250430.pdf'
-    },
-    {
-      id: '2',
-      client_id: '2',
-      client_name: 'Finance Corp',
-      report_date: '2025-04-29T00:00:00.000Z',
-      created_at: '2025-04-29T12:00:00.000Z',
-      sent_at: '2025-04-29T12:05:00.000Z',
-      status: 'sent',
-      recipient_email: 'finance@example.com',
-      pdf_path: '/reports/finance_report_20250429.pdf'
-    },
-    {
-      id: '3',
-      client_id: '1',
-      client_name: 'Tech Company',
-      report_date: '2025-04-28T00:00:00.000Z',
-      created_at: '2025-04-28T12:00:00.000Z',
-      sent_at: null,
-      status: 'ready',
-      recipient_email: null,
-      pdf_path: '/reports/tech_report_20250428.pdf'
-    },
-    {
-      id: '4',
-      client_id: '3',
-      client_name: 'Green Energy Startup',
-      report_date: '2025-04-27T00:00:00.000Z',
-      created_at: '2025-04-27T12:00:00.000Z',
-      sent_at: null,
-      status: 'generating',
-      recipient_email: null,
-      pdf_path: null
-    },
-    {
-      id: '5',
-      client_id: '2',
-      client_name: 'Finance Corp',
-      report_date: '2025-04-26T00:00:00.000Z',
-      created_at: '2025-04-26T12:00:00.000Z',
-      sent_at: null,
-      status: 'error',
-      recipient_email: null,
-      pdf_path: null
-    }
-  ];
-
-  // Mock clients data
-  const mockClients = [
-    { id: '1', name: 'Tech Company' },
-    { id: '2', name: 'Finance Corp' },
-    { id: '3', name: 'Green Energy Startup' }
-  ];
-
   const statusOptions = [
     { value: 'pending', label: 'Pending' },
     { value: 'generating', label: 'Generating' },
@@ -91,34 +25,22 @@ const ReportsPage: React.FC = () => {
     { value: 'error', label: 'Error' }
   ];
 
+  const { data: clients } = useQuery({
+    queryKey: ['clients'],
+    queryFn: () => api.clientProfiles.getAll()
+  });
+  
   const { data: reports, isLoading } = useQuery({
     queryKey: ['reports', clientId, dateFrom, dateTo, status],
     queryFn: () => {
-      // Mock API call
-      console.log('Fetching reports with filters:', { clientId, dateFrom, dateTo, status });
+      // Build query parameters
+      const params: any = {};
+      if (clientId) params.client_id = clientId;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      if (status) params.status = status;
       
-      // Apply filters
-      let filteredReports = [...mockReports];
-      
-      if (clientId) {
-        filteredReports = filteredReports.filter(report => report.client_id === clientId);
-      }
-      
-      if (dateFrom) {
-        const fromDate = new Date(dateFrom);
-        filteredReports = filteredReports.filter(report => new Date(report.report_date) >= fromDate);
-      }
-      
-      if (dateTo) {
-        const toDate = new Date(dateTo);
-        filteredReports = filteredReports.filter(report => new Date(report.report_date) <= toDate);
-      }
-      
-      if (status) {
-        filteredReports = filteredReports.filter(report => report.status === status);
-      }
-      
-      return Promise.resolve(filteredReports);
+      return api.reports.getAll(params);
     }
   });
 
@@ -155,7 +77,7 @@ const ReportsPage: React.FC = () => {
         {clientId && (
           <div className="mt-2 sm:mt-0">
             <span className="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-              Client: {mockClients.find(c => c.id === clientId)?.name || 'Unknown'}
+              Client: {clients.find(c => c.id === clientId)?.name || 'Unknown'}
             </span>
           </div>
         )}
@@ -201,7 +123,7 @@ const ReportsPage: React.FC = () => {
                   })}
                 >
                   <option value="">All Clients</option>
-                  {mockClients.map(client => (
+                  {clients.map(client => (
                     <option key={client.id} value={client.id}>{client.name}</option>
                   ))}
                 </select>

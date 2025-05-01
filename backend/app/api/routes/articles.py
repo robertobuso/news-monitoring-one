@@ -86,3 +86,49 @@ async def get_article(
     # Let FastAPI convert the SQLAlchemy model instance (article)
     # to the ArticleSchema response_model.
     return article
+
+@router.get("/stats/sources", response_model=Dict[str, Any])
+async def get_article_source_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    days: int = Query(30, ge=1, le=365, description="Number of days to include in stats")
+) -> Dict[str, Any]:
+    """
+    Get article statistics grouped by source.
+    
+    Args:
+        db: Database session
+        current_user: Current authenticated user
+        days: Number of days to include in stats (default: 30)
+        
+    Returns:
+        Dict: Source statistics
+    """
+    from sqlalchemy import func, and_
+    from datetime import datetime, timedelta
+    
+    # Calculate date range
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+    
+    # Query to count articles by source within date range
+    query = (
+        select(Article.source, func.count(Article.id).label("count"))
+        .where(
+            and_(
+                Article.published_at >= start_date,
+                Article.published_at <= end_date
+            )
+        )
+        .group_by(Article.source)
+        .order_by(func.count(Article.id).desc())
+    )
+    
+    result = await db.execute(query)
+    sources = [{"source": row[0], "count": row[1]} for row in result.fetchall()]
+    
+    return {
+        "success": True,
+        "days": days,
+        "sources": sources
+    }

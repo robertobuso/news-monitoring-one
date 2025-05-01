@@ -50,31 +50,61 @@ const DashboardPage: React.FC = () => {
     queryFn: () => api.articles.getAll({ limit: 5 })
   });
 
+  const { data: sourceStats, isLoading: isLoadingSourceStats } = useQuery({
+    queryKey: ['articleSourceStats'],
+    queryFn: () => api.articleStats.getSourceCounts(),
+    // No need to fetch all articles anymore
+  });
+
   // Chart data for articles by source
-  const chartData = {
-    labels: ['Source 1', 'Source 2', 'Source 3', 'Source 4', 'Source 5'],
-    datasets: [
-      {
+  const chartData = React.useMemo(() => {
+    if (!sourceStats) {
+      return {
+        labels: [],
+        datasets: [{
+          label: 'Articles by Source',
+          data: [],
+          backgroundColor: [],
+          borderColor: [],
+          borderWidth: 1
+        }]
+      };
+    }
+    
+    // Sort by count descending and take top 5
+    const topSources = [...sourceStats]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    
+    // Background colors for the chart
+    const backgroundColors = [
+      'rgba(54, 162, 235, 0.6)',
+      'rgba(75, 192, 192, 0.6)',
+      'rgba(255, 206, 86, 0.6)',
+      'rgba(255, 99, 132, 0.6)',
+      'rgba(153, 102, 255, 0.6)'
+    ];
+    
+    // Border colors (darker versions of background colors)
+    const borderColors = [
+      'rgba(54, 162, 235, 1)',
+      'rgba(75, 192, 192, 1)',
+      'rgba(255, 206, 86, 1)',
+      'rgba(255, 99, 132, 1)',
+      'rgba(153, 102, 255, 1)'
+    ];
+    
+    return {
+      labels: topSources.map(item => item.source),
+      datasets: [{
         label: 'Articles by Source',
-        data: [12, 19, 8, 15, 10],
-        backgroundColor: [
-          'rgba(54, 162, 235, 0.6)',
-          'rgba(75, 192, 192, 0.6)',
-          'rgba(255, 206, 86, 0.6)',
-          'rgba(255, 99, 132, 0.6)',
-          'rgba(153, 102, 255, 0.6)',
-        ],
-        borderColor: [
-          'rgba(54, 162, 235, 1)',
-          'rgba(75, 192, 192, 1)',
-          'rgba(255, 206, 86, 1)',
-          'rgba(255, 99, 132, 1)',
-          'rgba(153, 102, 255, 1)',
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
+        data: topSources.map(item => item.count),
+        backgroundColor: backgroundColors.slice(0, topSources.length),
+        borderColor: borderColors.slice(0, topSources.length),
+        borderWidth: 1
+      }]
+    };
+  }, [sourceStats]);
 
   const chartOptions = {
     responsive: true,

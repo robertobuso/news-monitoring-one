@@ -9,8 +9,8 @@ import {
   CheckIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
-import api from '../../api/client'; // Import your API client
-// import { Article as ArticleType } from '../../types'; // Import your Article type/interface
+import api from '../../api/client';
+import { Article as ArticleType, RelevantClient } from '../../types';
 
 const ArticleDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -18,28 +18,14 @@ const ArticleDetailPage: React.FC = () => {
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // Fetch real article data
-  const { data: article, isLoading, error } = useQuery<ArticleType>({
-    queryKey: ['article', id],
-    queryFn: () => api.articles.getById(id as string), // Use actual API call
-    enabled: !!id
-  });
-
-  // Keep relevant clients mocked for now, or implement backend/API for it
-  const { data: relevantClients } = useQuery({
+  const { data: relevantClients, isLoading: isLoadingClients, refetch: refetchClients } = useQuery({
     queryKey: ['article-clients', id],
-    queryFn: () => {
-      console.log('Fetching relevant clients for article id:', id);
-       // Replace with actual API call when ready: e.g., api.articles.getRelevantClients(id as string)
-       const mockClients = [
-         { id: '1', name: 'Tech Company', relevance_score: 0.95 },
-         { id: '2', name: 'Finance Corp', relevance_score: 0.68 },
-         { id: '3', name: 'Green Energy Startup', relevance_score: 0.32 }
-       ];
-      return Promise.resolve(mockClients);
-    },
+    queryFn: () => api.articles.getRelevantClients(id as string),
     enabled: !!id
   });
+  
+  // Make sure to import queryClient if needed
+  const queryClient = useQueryClient();
 
   const shareMutation = useMutation({
     mutationFn: (data: { articleId: string; clientIds: string[] }) => {
@@ -59,20 +45,38 @@ const ArticleDetailPage: React.FC = () => {
 
   const analyzeMutation = useMutation({
     mutationFn: (articleId: string) => {
-      // --- Use real API call ---
       return api.articles.analyze(articleId);
-      // -------------------------
     },
-    onSuccess: (data) => { // Optionally use the data returned from backend
+    onSuccess: (data) => {
       console.log("Analysis results:", data);
-      toast.success('Article analysis started');
-      // You might want to invalidate queries related to relevance here
-      queryClient.invalidateQueries({ queryKey: ['article', id] }); // Refetch article potentially?
-      queryClient.invalidateQueries({ queryKey: ['article-clients', id] }); // Refetch relevant clients
+      toast.success('Article analysis completed');
+      
+      // Invalidate relevant queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['article', id] });
+      queryClient.invalidateQueries({ queryKey: ['article-clients', id] });
+      queryClient.invalidateQueries({ queryKey: ['articles'] });
+      
+      // Explicitly refetch the relevant clients to update the UI immediately
+      refetchClients();
+      
+      // If any relevance calculations were created/updated, refresh client data too
+      if (data.relevance_results?.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
+        
+        // Get unique client IDs from the relevance results
+        const clientIds = [...new Set(data.relevance_results.map(r => r.client_id))];
+        
+        // Invalidate queries for each affected client
+        clientIds.forEach(clientId => {
+          queryClient.invalidateQueries({ queryKey: ['client', clientId] });
+          queryClient.invalidateQueries({ queryKey: ['clientArticles', clientId] });
+          queryClient.invalidateQueries({ queryKey: ['clientReports', clientId] });
+        });
+      }
     },
-    onError: (error: any) => { // Add type annotation
+    onError: (error: any) => {
       console.error('Failed to analyze article:', error);
-      toast.error(error.response?.data?.detail || 'Failed to start analysis');
+      toast.error(error.response?.data?.detail || 'Failed to analyze article');
     }
   });
 
