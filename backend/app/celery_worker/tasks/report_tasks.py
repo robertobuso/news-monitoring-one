@@ -1,58 +1,93 @@
-"""
-Celery tasks for report generation and delivery.
-"""
-import asyncio
 import logging
-from datetime import date, datetime
 import uuid
+from datetime import date, datetime
+import asyncio # Added import
 
 from celery import shared_task
 
+from app.celery_worker.celery_app import celery_app
 from app.db.session import AsyncSessionLocal
 from app.services.report_service import ReportService
+from app.repositories.report import ReportRepository # Import repository
 
 logger = logging.getLogger(__name__)
 
-
-@shared_task(name="generate_report")
-def generate_report_task(client_id: str, report_date: str = None):
+@shared_task(name="generate_report", bind=True, max_retries=3, default_retry_delay=60) # Add bind=True, retries
+def generate_report_task(self, client_id_str: str, report_date_iso: str | None = None): # Add self
     """
     Generate a report for a client.
-    
+
     Args:
-        client_id: Client profile ID
-        report_date: Optional report date (ISO format)
+        client_id_str: Client profile ID as a string.
+        report_date_iso: Optional report date in ISO format string (YYYY-MM-DD).
     """
-    logger.info(f"Generating report for client {client_id}")
-    
-    async def _generate_report():
+    client_id = uuid.UUID(client_id_str)
+    report_date = date.fromisoformat(report_date_iso) if report_date_iso else None
+    # Variable to hold report ID in case of mid-process failure
+    report_id_for_error_update: uuid.UUID | None = None
+
+    logger.info(f"Starting report generation task for client: {client_id}, date: {report_date}")
+
+    async def _generate_report_async():
+        nonlocal report_id_for_error_update # Allow modification
         async with AsyncSessionLocal() as db:
             report_service = ReportService(db)
-            
-            # Parse date if provided
-            parsed_date = None
-            if report_date:
-                try:
-                    parsed_date = date.fromisoformat(report_date)
-                except ValueError:
-                    logger.error(f"Invalid date format: {report_date}")
-            
-            # Generate report
-            result = await report_service.generate_daily_report(
-                client_id=uuid.UUID(client_id),
-                report_date=parsed_date
-            )
-            
-            if result["success"]:
-                report = result["report"]
-                logger.info(f"Successfully generated report {report.id} for client {client_id}")
-                return {"report_id": str(report.id), "status": report.status}
-            else:
-                logger.error(f"Failed to generate report for client {client_id}: {result.get('message', 'Unknown error')}")
-                return {"error": result.get("message", "Unknown error")}
-    
-    # Run the async function
-    return asyncio.run(_generate_report())
+            report_repo = ReportRepository(db) # Instantiate repo
+
+            try:
+                # --- Main Service Call ---
+                result = await report_service.generate_daily_report(
+                    client_id=client_id,
+                    report_date=report_date
+                )
+                # -----------------------
+
+                # Store report ID if the service method returned one
+                if result.get("report") and hasattr(result["report"], "id"):
+                    report_id_for_error_update = result["report"].id
+
+                if result["success"]:
+                    report = result["report"]
+                    logger.info(f"Successfully generated report {report.id} for client {client_id}")
+                    return {"report_id": str(report.id), "status": report.status}
+                else:
+                    # Service handled the error gracefully, log and potentially update status
+                    error_message = result.get('message', 'Unknown error during report generation')
+                    logger.error(f"Report generation failed for client {client_id}: {error_message}")
+                    if report_id_for_error_update:
+                        logger.info(f"Attempting to mark report {report_id_for_error_update} as error due to service failure.")
+                        await report_repo.update_status(report_id_for_error_update, "error")
+                    return {"error": error_message}
+
+            except Exception as e:
+                # --- Catch unexpected exceptions during generate_daily_report ---
+                logger.exception(f"Unhandled exception generating report for client {client_id}: {e}")
+                if report_id_for_error_update:
+                    # Attempt to mark the report as failed if we know its ID
+                    try:
+                        logger.info(f"Attempting to mark report {report_id_for_error_update} as error after exception.")
+                        await report_repo.update_status(report_id_for_error_update, "error")
+                        # Explicitly commit the status update if session is still active
+                        await db.commit()
+                    except Exception as update_err:
+                        logger.error(f"Failed to update report status to error after exception: {update_err}")
+                        await db.rollback() # Rollback if status update failed
+                else:
+                     # If error happened before report record was created, just log
+                     pass
+                # Re-raise the exception to mark the Celery task as failed
+                # Or use self.retry(exc=e) to retry the task
+                raise # Or self.retry(exc=e)
+
+    try:
+        # Run the async function
+        return asyncio.run(_generate_report_async())
+    except Exception as task_exc:
+         # Catch exception raised from _generate_report_async if needed
+         # Celery will mark the task as FAILED due to the unhandled exception
+         logger.error(f"Celery task failed for client {client_id} after running async part: {task_exc}")
+         # Depending on retry logic, this might not be reached if self.retry is used
+         return {"error": f"Task execution failed: {task_exc}"}
 
 
 @shared_task(name="generate_all_daily_reports")

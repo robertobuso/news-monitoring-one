@@ -2,12 +2,16 @@
 Pydantic schemas for report data validation.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr
 
+
+class ReportGenerateRequest(BaseModel):
+    client_id: uuid.UUID
+    report_date: Optional[date] = None
 
 class ReportStatus(str, Enum):
     """Enum for report status."""

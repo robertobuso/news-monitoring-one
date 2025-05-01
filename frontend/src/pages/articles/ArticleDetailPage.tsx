@@ -59,16 +59,20 @@ const ArticleDetailPage: React.FC = () => {
 
   const analyzeMutation = useMutation({
     mutationFn: (articleId: string) => {
-      // TODO: Replace with actual API call
-      console.log('Analyzing article with id:', articleId);
-      // return api.articles.analyze(articleId);
-      return Promise.resolve({ success: true });
+      // --- Use real API call ---
+      return api.articles.analyze(articleId);
+      // -------------------------
     },
-    onSuccess: () => {
+    onSuccess: (data) => { // Optionally use the data returned from backend
+      console.log("Analysis results:", data);
       toast.success('Article analysis started');
+      // You might want to invalidate queries related to relevance here
+      queryClient.invalidateQueries({ queryKey: ['article', id] }); // Refetch article potentially?
+      queryClient.invalidateQueries({ queryKey: ['article-clients', id] }); // Refetch relevant clients
     },
-    onError: () => {
-      toast.error('Failed to analyze article');
+    onError: (error: any) => { // Add type annotation
+      console.error('Failed to analyze article:', error);
+      toast.error(error.response?.data?.detail || 'Failed to start analysis');
     }
   });
 
@@ -126,7 +130,7 @@ const ArticleDetailPage: React.FC = () => {
         </div>
         <div className="mt-3 sm:mt-0 flex space-x-3">
           <button
-            onClick={() => analyzeMutation.mutate(article.id)}
+            onClick={() => article?.id && analyzeMutation.mutate(article.id)} 
             disabled={analyzeMutation.isPending}
             className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >

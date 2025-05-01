@@ -5,13 +5,13 @@ import uuid
 from datetime import datetime, date
 from typing import Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.user import User
-from app.schemas.report import Report, ReportWithArticles
+from app.schemas.report import Report, ReportWithArticles, ReportGenerateRequest
 from app.services.report_service import ReportService
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -167,31 +167,36 @@ async def download_report(
 
 @router.post("/generate", status_code=status.HTTP_202_ACCEPTED)
 async def generate_report(
-    client_id: uuid.UUID,
-    report_date: Optional[date] = None,
+    # Expect the request data from the body using the Pydantic model
+    request_data: ReportGenerateRequest = Body(...),
+    # Dependencies remain the same
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Queue report generation.
-    
-    Args:
-        client_id: Client profile ID
-        report_date: Optional report date (defaults to today)
-        db: Database session
-        current_user: Current authenticated user
-        
-    Returns:
-        dict: Report generation result
+    Queue report generation based on client ID and optional date from request body.
     """
-    from app.celery_worker.tasks.report_tasks import generate_report_task
-    
+    from app.celery_worker.tasks.report_tasks import generate_report_task # Keep import here for now
+
+    # Extract data from the request_data model
+    client_id = request_data.client_id
+    report_date = request_data.report_date
+
+    # --- Optional: Add verification that client_id belongs to current_user ---
+    # You might want to fetch the client profile here to ensure authorization,
+    # although maybe the task itself handles this implicitly later.
+    # client_repo = ClientProfileRepository(db)
+    # client = await client_repo.get_by_id_and_user_id(client_id, current_user.id)
+    # if not client:
+    #    raise HTTPException(status_code=404, detail="Client profile not found or not authorized")
+    # -------------------------------------------------------------------------
+
     # Queue report generation task
     task = generate_report_task.delay(
-        str(client_id),
-        report_date.isoformat() if report_date else None
+        str(client_id), # Pass client_id as string to Celery
+        report_date.isoformat() if report_date else None # Pass date as string or None
     )
-    
+
     return {
         "task_id": task.id,
         "status": "queued",

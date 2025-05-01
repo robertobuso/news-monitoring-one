@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 import uuid
 from typing import Dict, List, Optional, Union
+import asyncio
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,8 @@ from app.services.rss_parser import parse_rss_feed
 from app.services.web_scraper import scrape_website
 from app.services.content_extractor import extract_metadata, extract_text_from_html
 from app.utils.html_cleaner import clean_html
+from app.services.ai_service import AIService
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,7 @@ class FeedService:
         self.db = db
         self.feed_repo = NewsFeedRepository(db)
         self.article_repo = ArticleRepository(db)
+        self.ai_service = AIService(db) 
     
     async def create_feed(self, feed_data: NewsFeedCreate) -> NewsFeed:
         """
@@ -142,76 +146,119 @@ class FeedService:
     async def process_feed(self, feed_id: uuid.UUID) -> Dict[str, Union[bool, str, List]]:
         """
         Process a feed to fetch and store articles.
-        
+        Triggers background AI analysis for new articles.
+
         Args:
             feed_id: Feed ID
-            
+
         Returns:
-            Dict: Result with success status, message, and saved articles
+            Dict: Result with success status, message, and basic info (not waiting for AI)
         """
         feed = await self.feed_repo.get(id=feed_id)
         if not feed:
             return {"success": False, "message": "Feed not found"}
-        
+
         try:
             if feed.type == "rss":
                 result = parse_rss_feed(feed.url)
             elif feed.type == "web":
+                # Assuming scrape_website returns a similar structure
+                # with potentially one article under "article" key
                 result = await scrape_website(feed.url)
             else:
                 return {"success": False, "message": f"Unsupported feed type: {feed.type}"}
-            
+
             if not result["success"]:
-                await self.update_feed_health(feed_id, "error", result["message"])
+                await self.update_feed_health(feed_id, "error", result.get("message", "Parsing/Scraping failed"))
                 return result
-            
+
             # Process articles
-            articles = result.get("articles", [])
-            if feed.type == "web" and "article" in result:
-                articles = [result["article"]]
-            
-            saved_articles = []
-            for article_data in articles:
+            articles_data = result.get("articles", [])
+            if feed.type == "web" and "article" in result and result["article"]:
+                 # Ensure web scraper result is wrapped in a list if needed
+                 articles_data = [result["article"]] if isinstance(result["article"], dict) else []
+
+            newly_saved_article_ids = []
+            processed_count = 0
+            skipped_count = 0
+
+            for article_dict in articles_data:
+                processed_count += 1
                 # Check for duplicates by URL
-                existing = await self.article_repo.get_by_url(article_data["url"])
+                existing = await self.article_repo.get_by_url(article_dict["url"])
                 if existing:
+                    skipped_count += 1
                     continue
-                
-                # Clean content and extract metadata
-                if "<" in article_data["content"] and ">" in article_data["content"]:
-                    article_data["content"] = clean_html(article_data["content"])
-                
-                article_data["meta_data"] = extract_metadata(article_data["content"])
-                article_create = ArticleCreate(
-                    feed_id=feed_id,
-                    title=article_data["title"],
-                    url=article_data["url"],
-                    source=article_data["source"],
-                    published_at=article_data["published_at"],
-                    author=article_data["author"],
-                    content=article_data["content"],
-                    meta_data=article_data["meta_data"]
-                )
-                
-                logger.info(f"ArticleCreate before repo.create: published_at type={type(article_create.published_at)}, value={article_create.published_at}")
-                
-                article = await self.article_repo.create(obj_in=article_create)
-                saved_articles.append(article)
-            
-            # Update feed health
+
+                # --- Prepare data for ArticleCreate ---
+                # Clean content if needed (basic check)
+                content = article_dict.get("content", "")
+                if content and "<" in content and ">" in content:
+                    cleaned_content = clean_html(content)
+                else:
+                    cleaned_content = content
+
+                # Basic metadata extraction (can be improved)
+                meta_data = extract_metadata(cleaned_content)
+
+                try:
+                    article_create_schema = ArticleCreate(
+                        feed_id=feed_id,
+                        title=article_dict.get("title", "No Title Provided"),
+                        url=article_dict["url"], # URL should always exist
+                        source=article_dict.get("source", feed.name), # Fallback to feed name
+                        published_at=article_dict["published_at"], # Should be datetime object now
+                        author=article_dict.get("author"),
+                        content=cleaned_content,
+                        meta_data=meta_data
+                    )
+                except Exception as pydantic_error:
+                    logger.error(f"Pydantic validation failed for article {article_dict.get('url')}: {pydantic_error}")
+                    continue # Skip this article if basic data is invalid
+
+                # --- Save the article ---
+                try:
+                    article = await self.article_repo.create(obj_in=article_create_schema)
+                    newly_saved_article_ids.append(article.id)
+                    logger.info(f"Saved new article: {article.id} - {article.title}")
+
+                    # --- Trigger background AI processing for the new article ---
+                    # We don't await this, let it run in the background
+                    asyncio.create_task(self.ai_service.process_article(article.id))
+                    logger.info(f"Triggered background analysis for article: {article.id}")
+                    # ------------------------------------------------------------
+
+                except Exception as db_error:
+                     logger.error(f"Database error saving article {article_dict.get('url')}: {db_error}")
+                     # Consider rolling back the specific article insert if needed,
+                     # although commit happens inside repo.create now.
+                     # Might need transaction management at the service level for batch inserts.
+
+            # Update feed health and last checked time
             await self.update_feed_health(feed_id, "healthy")
-            
+
+            saved_count = len(newly_saved_article_ids)
+            message = (f"Processed {processed_count} articles from feed. "
+                       f"Saved {saved_count} new articles. Skipped {skipped_count} duplicates. "
+                       f"Background analysis triggered for new articles.")
+
             return {
-                "success": True, 
-                "message": f"Processed feed successfully. Saved {len(saved_articles)} new articles.",
-                "articles": saved_articles
+                "success": True,
+                "message": message,
+                "saved_count": saved_count,
+                "skipped_count": skipped_count,
+                "total_parsed": processed_count
+                # Avoid returning full article list here as analysis isn't done yet
             }
-        
+
         except Exception as e:
-            logger.error(f"Error processing feed {feed_id}: {e}")
+            logger.error(f"Error processing feed {feed_id}: {e}", exc_info=True) # Add traceback
             await self.update_feed_health(feed_id, "error", str(e))
+            # Ensure db session is rolled back in case of error before health update commit
+            await self.db.rollback()
+            # We might need to recommit the health update in a separate step/session
             return {"success": False, "message": f"Error: {str(e)}"}
-    
+        
     async def update_feed_health(self, feed_id: uuid.UUID, status: str, message: Optional[str] = None) -> None:
         """
         Update feed health status.
