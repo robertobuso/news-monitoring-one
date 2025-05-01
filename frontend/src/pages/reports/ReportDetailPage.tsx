@@ -41,7 +41,7 @@ const ReportDetailPage: React.FC = () => {
         id: '1',
         title: 'New AI Regulations Proposed by EU Commission',
         source: 'Tech News',
-        published_at: '2025-04-28T10:00:00.000Z',
+        published_at: new Date('2025-04-28T10:00:00.000Z'),
         relevance_score: 0.92,
         summary: 'The European Commission has proposed new regulations for AI systems, focusing on transparency and ethical use. This could impact global tech companies operating in European markets.'
       },
@@ -49,7 +49,7 @@ const ReportDetailPage: React.FC = () => {
         id: '2',
         title: 'Tech Giants Report Strong Quarterly Earnings',
         source: 'Finance Daily',
-        published_at: '2025-04-27T14:30:00.000Z',
+        published_at: new Date('2025-04-27T14:30:00.000Z'),
         relevance_score: 0.85,
         summary: 'Major tech companies reported earnings exceeding analyst expectations, with particularly strong performance in cloud services and AI applications.'
       },
@@ -57,7 +57,7 @@ const ReportDetailPage: React.FC = () => {
         id: '3',
         title: 'Advancements in Quantum Computing Show Promise',
         source: 'Science Today',
-        published_at: '2025-04-26T09:15:00.000Z',
+        published_at: new Date('2025-04-26T09:15:00.000Z'),
         relevance_score: 0.78,
         summary: 'Recent breakthroughs in quantum computing could accelerate development timelines, potentially bringing practical applications to market sooner than expected.'
       },
@@ -65,7 +65,7 @@ const ReportDetailPage: React.FC = () => {
         id: '4',
         title: 'Competitors Launch New Cloud Features',
         source: 'Business Insider',
-        published_at: '2025-04-25T11:45:00.000Z',
+        published_at: new Date('2025-04-25T11:45:00.000Z'),
         relevance_score: 0.89,
         summary: 'Your key competitors have announced new features for their cloud platforms, focusing on enhanced security and integration capabilities.'
       },
@@ -73,7 +73,7 @@ const ReportDetailPage: React.FC = () => {
         id: '5',
         title: 'AI Ethics Becoming Key Market Differentiator',
         source: 'Marketing Weekly',
-        published_at: '2025-04-24T16:20:00.000Z',
+        published_at: new Date('2025-04-24T16:20:00.000Z'),
         relevance_score: 0.81,
         summary: 'Companies with strong AI ethics policies are seeing improved customer trust and brand perception, according to a new market research study.'
       }

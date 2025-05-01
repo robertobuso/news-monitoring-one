@@ -194,12 +194,16 @@ class PDFService:
         Returns:
             str: Path to saved PDF
         """
-        # Create directory if it doesn't exist
-        reports_dir = "app/static/reports"
+        # Create absolute path to reports directory
+        import os
+        # Get the current working directory
+        cwd = os.getcwd()
+        # Create reports directory path
+        reports_dir = os.path.join(cwd, "backend", "app", "static", "reports")
         os.makedirs(reports_dir, exist_ok=True)
 
         # Save PDF to file
-        file_path = f"{reports_dir}/report_{report_id}.pdf"
+        file_path = os.path.join(reports_dir, f"report_{report_id}.pdf")
         with open(file_path, "wb") as f:
             f.write(pdf_buffer.read())
 

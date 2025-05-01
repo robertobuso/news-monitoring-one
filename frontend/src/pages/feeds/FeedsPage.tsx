@@ -135,6 +135,7 @@ const FeedsPage: React.FC = () => {
                     <div className="flex items-center">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
+                          {/* Make sure we're using the feed's actual ID */}
                           <Link to={`/feeds/${feed.id}`} className="hover:text-blue-600">
                             {feed.name}
                           </Link>
@@ -169,6 +170,7 @@ const FeedsPage: React.FC = () => {
                     >
                       <ArrowPathIcon className="h-5 w-5" />
                     </button>
+                    {/* Again, make sure we're using the feed's actual ID */}
                     <Link to={`/feeds/${feed.id}`} className="text-gray-600 hover:text-gray-900">
                       Edit
                     </Link>

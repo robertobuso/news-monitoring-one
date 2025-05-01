@@ -19,20 +19,28 @@ const ReportGeneratePage: React.FC = () => {
 
   const { data: clients, isLoading: isLoadingClients } = useQuery({
     queryKey: ['clients'],
-    queryFn: () => Promise.resolve(mockClients)
+    queryFn: () => api.clientProfiles.getAll()
   });
-
+  
   const generateReportMutation = useMutation({
     mutationFn: (data: { client_id: string; report_date?: string; send_email?: boolean; recipient_email?: string }) => {
-      console.log('Generating report with data:', data);
-      return Promise.resolve({ id: 'new-report-id' });
+      const apiData = {
+        client_id: data.client_id,
+        report_date: data.report_date,
+        recipient_email: data.send_email ? data.recipient_email : undefined
+      };
+      return api.reports.generate(data.client_id, data.report_date, data.send_email ? data.recipient_email : undefined);
     },
     onSuccess: (data) => {
       toast.success('Report generation started');
-      navigate(`/reports/${data.id}`);
+      // Wait for a moment before navigating to reports page since generation is async
+      setTimeout(() => {
+        navigate('/reports');
+      }, 1500);
     },
-    onError: () => {
-      toast.error('Failed to generate report');
+    onError: (error: any) => {
+      console.error('Failed to generate report:', error);
+      toast.error(error.response?.data?.detail || 'Failed to generate report');
       setIsSubmitting(false);
     }
   });

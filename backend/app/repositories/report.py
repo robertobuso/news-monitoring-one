@@ -83,6 +83,69 @@ class ReportRepository(BaseRepository[Report, ReportCreate, ReportUpdate]):
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    async def get_by_user_id_and_date_range(
+            self,
+            user_id: uuid.UUID,
+            date_from: Optional[datetime] = None,
+            date_to: Optional[datetime] = None,
+            skip: int = 0,
+            limit: int = 100
+        ) -> Tuple[List[Report], int]:
+            """
+            Get reports by user ID, filtered by date range and paginated.
+            Also returns the total count of matching reports before pagination.
+
+            Args:
+                user_id: The ID of the user whose reports are to be fetched.
+                date_from: Optional start date filter (inclusive).
+                date_to: Optional end date filter (inclusive).
+                skip: Number of reports to skip for pagination.
+                limit: Maximum number of reports to return.
+
+            Returns:
+                Tuple[List[Report], int]: A tuple containing the list of reports
+                                        and the total count of matching reports.
+            """
+            # --- Query for the paginated list of reports ---
+            select_stmt = select(Report).where(
+                Report.user_id == user_id
+            )
+
+            # Apply date filters if provided
+            if date_from:
+                # Assuming report_date is a Date column, compare appropriately
+                # If it's DateTime, the comparison is fine. If Date, ensure comparison logic matches.
+                # For simplicity, assuming comparison works directly or adjust as needed (e.g., cast)
+                select_stmt = select_stmt.where(Report.report_date >= date_from)
+            if date_to:
+                select_stmt = select_stmt.where(Report.report_date <= date_to)
+
+            # Apply ordering and pagination
+            select_stmt = select_stmt.order_by(
+                Report.created_at.desc()  # Or Report.report_date.desc() if preferred
+            ).offset(skip).limit(limit)
+
+            result = await self.db.execute(select_stmt)
+            reports_list = result.scalars().all()
+
+            # --- Query for the total count (without pagination) ---
+            from sqlalchemy import func # Ensure func is imported
+
+            count_stmt = select(func.count()).select_from(Report).where(
+                Report.user_id == user_id
+            )
+
+            # Apply the same date filters as the main query
+            if date_from:
+                count_stmt = count_stmt.where(Report.report_date >= date_from)
+            if date_to:
+                count_stmt = count_stmt.where(Report.report_date <= date_to)
+
+            count_result = await self.db.execute(count_stmt)
+            total_count = count_result.scalar_one_or_none() or 0 # Get count, default to 0 if None
+
+            return reports_list, total_count
+
     async def create_for_user(
         self, user_id: uuid.UUID, obj_in: ReportCreate
     ) -> Report:
@@ -275,3 +338,71 @@ class ReportArticleRepository:
             await self.db.refresh(article)
             
         return updated_articles
+    
+    async def get_by_client_id_and_date_range(
+        self, 
+        client_id: uuid.UUID,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        skip: int = 0,
+        limit: int = 100
+    ) -> List[Report]:
+        """
+        Get reports by client ID and date range.
+        
+        Args:
+            client_id: Client ID
+            date_from: Optional start date filter
+            date_to: Optional end date filter
+            skip: Number of reports to skip
+            limit: Maximum number of reports to return
+            
+        Returns:
+            List[Report]: List of reports
+        """
+        query = select(Report).where(
+            Report.client_id == client_id
+        )
+        
+        if date_from:
+            query = query.where(Report.report_date >= date_from)
+        if date_to:
+            query = query.where(Report.report_date <= date_to)
+        
+        query = query.order_by(
+            Report.created_at.desc()
+        ).offset(skip).limit(limit)
+        
+        result = await self.db.execute(query)
+        return result.scalars().all()
+
+    async def count_by_client_id_and_date_range(
+        self, 
+        client_id: uuid.UUID,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None
+    ) -> int:
+        """
+        Count reports by client ID and date range.
+        
+        Args:
+            client_id: Client ID
+            date_from: Optional start date filter
+            date_to: Optional end date filter
+            
+        Returns:
+            int: Count of reports
+        """
+        from sqlalchemy import func
+        
+        query = select(func.count()).select_from(Report).where(
+            Report.client_id == client_id
+        )
+        
+        if date_from:
+            query = query.where(Report.report_date >= date_from)
+        if date_to:
+            query = query.where(Report.report_date <= date_to)
+        
+        result = await self.db.execute(query)
+        return result.scalar()

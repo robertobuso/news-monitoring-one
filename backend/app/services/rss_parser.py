@@ -4,6 +4,7 @@ RSS feed parser service for fetching and parsing RSS feeds.
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Union
+from dateutil import parser
 
 import feedparser
 from feedparser import FeedParserDict
@@ -12,25 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 def parse_date(date_str: str) -> datetime:
-    """
-    Parse date string from RSS feed into datetime object.
-    
-    Args:
-        date_str: Date string from RSS feed
-        
-    Returns:
-        datetime: Parsed datetime object
-    """
     try:
-        # Try to parse using feedparser's internal date parser
-        parsed_time = feedparser.datetimes.parse_datetime(date_str)
-        if parsed_time:
-            return parsed_time
+        dt = parser.parse(date_str)
+        # Strip timezone to make it "naive"
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(tz=None).replace(tzinfo=None)
+        return dt
     except Exception as e:
         logger.warning(f"Error parsing date {date_str}: {e}")
-    
-    # Default to current time if parsing fails
-    return datetime.utcnow()
+        return datetime.utcnow()
+
 
 
 def extract_content(entry: FeedParserDict) -> str:

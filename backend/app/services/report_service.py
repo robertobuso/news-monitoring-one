@@ -276,6 +276,67 @@ class ReportService:
             "client_profile": client_profile
         }
 
+    async def get_reports_for_user(
+            self,
+            user_id: uuid.UUID,
+            date_from: Optional[datetime] = None,
+            date_to: Optional[datetime] = None,
+            skip: int = 0,
+            limit: int = 20  # Or match the default from your route
+        ) -> Dict[str, Any]:
+            """
+            Get reports associated with a specific user, potentially across
+            multiple client profiles, filtered by date range and paginated.
+
+            Args:
+                user_id: The ID of the user whose reports are to be fetched.
+                date_from: Optional start date filter for report creation/publish date.
+                date_to: Optional end date filter for report creation/publish date.
+                skip: Number of reports to skip for pagination.
+                limit: Maximum number of reports to return.
+
+            Returns:
+                Dict: A dictionary containing the success status, a list of reports,
+                    and the total count of matching reports.
+            """
+            logger.info(f"Fetching reports for user {user_id} with filters: "
+                        f"date_from={date_from}, date_to={date_to}, skip={skip}, limit={limit}")
+
+            # --- Assumption: You need to implement this method in ReportRepository ---
+            # This repository method should perform the actual database query
+            # filtering the 'reports' table by 'user_id' and the date range.
+            try:
+                reports, total_count = await self.report_repo.get_by_user_id_and_date_range(
+                    user_id=user_id,
+                    date_from=date_from,
+                    date_to=date_to,
+                    skip=skip,
+                    limit=limit
+                )
+            except Exception as e:
+                # Catch potential exceptions during the database call
+                logger.error(f"Error fetching reports for user {user_id} from repository: {e}", exc_info=True)
+                # You might want to return a specific error structure or raise an exception
+                # depending on your error handling strategy. For consistency with other
+                # methods, returning a dict might be appropriate.
+                return {
+                    "success": False,
+                    "message": f"An error occurred while fetching reports: {e}",
+                    "reports": [],
+                    "total": 0
+                }
+            # --- End of Assumption ---
+
+            logger.info(f"Found {len(reports)} reports (total: {total_count}) for user {user_id}")
+
+            return {
+                "success": True,
+                "reports": reports,
+                "total": total_count
+                # Note: Unlike get_reports_for_client, there's no single 'client_profile'
+                # to return here as this fetches across potentially multiple clients.
+            }
+
     async def generate_all_daily_reports(self) -> Dict[str, Any]:
         """
         Generate daily reports for all active client profiles.

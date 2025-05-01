@@ -42,20 +42,13 @@ class EmailService:
     ) -> Dict[str, Any]:
         """
         Send a report email with PDF attachment.
-        
-        Args:
-            user_email: Recipient email address
-            client_name: Client name
-            report_date: Report date
-            pdf_path: Path to PDF file
-            report_id: Report ID
-            
-        Returns:
-            Dict: Email sending result
         """
         if not self.api_key:
-            logger.error("SendGrid API key not configured")
-            return {"success": False, "error": "Email service not configured"}
+            # Check for API key in settings if not in environment
+            self.api_key = getattr(settings, "SENDGRID_API_KEY", None)
+            if not self.api_key:
+                logger.error("SendGrid API key not configured in environment or settings")
+                return {"success": False, "error": "Email service not configured - missing API key"}
 
         try:
             # Create SendGrid client

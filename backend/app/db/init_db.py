@@ -160,7 +160,7 @@ async def create_initial_articles(db: AsyncSession) -> None:
             published_at=datetime.utcnow() - timedelta(days=days_ago),
             author="Sample Author",
             content=f"This is the content of sample article {i+1}. It contains some text that can be used for testing the application.",
-            metadata={"tags": ["sample", "test"], "word_count": 100 + i * 10},
+            meta_data={"tags": ["sample", "test"], "word_count": 100 + i * 10},
         )
         articles.append(article)
     

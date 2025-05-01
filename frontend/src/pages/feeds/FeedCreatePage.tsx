@@ -5,24 +5,23 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
+import api from '../../api/client';  // Import the actual API client
 
 const FeedCreatePage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => {
-      // Mock API call until the API client is updated
-      console.log('Creating feed with data:', data);
-      return Promise.resolve({ id: 'new-feed-id', ...data });
-    },
+    // Use the actual API call instead of the mock function
+    mutationFn: (data: any) => api.feeds.create(data),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['feeds'] });
       toast.success('Feed created successfully');
-      navigate('/feeds');
+      navigate(`/feeds/${data.id}`);
     },
-    onError: () => {
-      toast.error('Failed to create feed');
+    onError: (error: any) => {
+      console.error('Error creating feed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to create feed');
     }
   });
 
@@ -180,7 +179,7 @@ const FeedCreatePage: React.FC = () => {
               </Link>
               <button
                 type="submit"
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || !formik.isValid}
                 className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
                 {createMutation.isPending ? 'Saving...' : 'Save Feed'}

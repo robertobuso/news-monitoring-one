@@ -66,15 +66,30 @@ class BaseRepository(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     async def create(self, *, obj_in: CreateSchemaType) -> ModelType:
         """
         Create a new record.
-        
+
         Args:
             obj_in: Data for record creation
-            
+
         Returns:
             ModelType: Created record
         """
-        obj_in_data = jsonable_encoder(obj_in)
+        # Create a dictionary directly from the Pydantic model's attributes
+        # Use exclude_unset=True if you only want fields that were explicitly set
+        # Use exclude_none=True if you want to skip fields with None values
+        # Choose the options that make sense for your create logic.
+        # For a standard create, exclude_unset might not be needed if all fields are required
+        # or have defaults. .dict() is often sufficient.
+        obj_in_data = obj_in.dict()
+
+        # Or, if you need more control or specific exclusions:
+        # obj_in_data = obj_in.dict(exclude={"field_to_exclude"})
+
+        # DO NOT use jsonable_encoder here for passing data to SQLAlchemy models.
+
+        # Instantiate the SQLAlchemy model using the dictionary
+        # that retains the correct Python types (like datetime objects).
         db_obj = self.model(**obj_in_data)
+
         self.db.add(db_obj)
         await self.db.commit()
         await self.db.refresh(db_obj)
@@ -85,26 +100,28 @@ class BaseRepository(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     ) -> ModelType:
         """
         Update a record.
-        
+
         Args:
             db_obj: Record to update
             obj_in: Data for record update
-            
+
         Returns:
             ModelType: Updated record
         """
-        obj_data = jsonable_encoder(db_obj)
-        
+        # Get update data dictionary, excluding unset fields
         if isinstance(obj_in, dict):
             update_data = obj_in
         else:
+            # Use exclude_unset=True to only apply fields present in the update schema
             update_data = obj_in.dict(exclude_unset=True)
-            
-        for field in obj_data:
-            if field in update_data:
-                setattr(db_obj, field, update_data[field])
-                
-        self.db.add(db_obj)
+
+        # Iterate through the update data and set attributes on the SQLAlchemy object
+        for field, value in update_data.items():
+             # Check if the field exists on the model to avoid errors
+             if hasattr(db_obj, field):
+                 setattr(db_obj, field, value) # Directly set the attribute
+
+        self.db.add(db_obj) # Add the updated object to the session
         await self.db.commit()
         await self.db.refresh(db_obj)
         return db_obj

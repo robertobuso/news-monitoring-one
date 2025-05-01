@@ -2,8 +2,8 @@
 Article repository for article-related database operations.
 """
 import uuid
-from datetime import datetime
-from typing import List, Optional, Tuple, Union
+from datetime import datetime, timedelta # Ensure timedelta is imported
+from typing import List, Optional, Tuple, Union, Dict, Any
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,57 +22,88 @@ class ArticleRepository(BaseRepository[Article, ArticleCreate, ArticleUpdate]):
     def __init__(self, db: AsyncSession):
         """
         Initialize article repository.
-        
+
         Args:
             db: SQLAlchemy async session
         """
         super().__init__(Article, db)
 
-    async def get_by_url(self, url: str) -> Optional[Article]:
+    # --- NEW or MODIFIED get_multi ---
+    # Override the base get_multi to add filtering capabilities
+    async def get_multi(
+        self,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        filters: Optional[Dict[str, Any]] = None
+    ) -> Tuple[List[Article], int]:
         """
-        Get an article by URL.
-        
+        Get multiple article records with filtering, ordering, and pagination.
+
         Args:
-            url: Article URL
-            
+            skip: Number of records to skip.
+            limit: Maximum number of records to return.
+            filters: Dictionary of filters to apply (e.g., {"feed_id": uuid, "source": "..."}).
+
         Returns:
-            Optional[Article]: Article if found, None otherwise
+            Tuple[List[Article], int]: List of articles and total count matching filters.
         """
+        select_stmt = select(self.model)
+        count_stmt = select(func.count()).select_from(self.model)
+
+        if filters:
+            conditions = []
+            for key, value in filters.items():
+                if value is None: # Skip None values unless explicitly handled
+                    continue
+                column = getattr(self.model, key, None)
+                if column is not None:
+                    # Handle specific filter types if needed
+                    if key == "search": # Assuming 'search' is a special filter key
+                         search_query = f"%{value}%"
+                         search_condition = or_(
+                             self.model.title.ilike(search_query),
+                             self.model.content.ilike(search_query)
+                         )
+                         conditions.append(search_condition)
+                    elif key == "date_from":
+                         conditions.append(self.model.published_at >= value)
+                    elif key == "date_to":
+                         conditions.append(self.model.published_at <= value)
+                    else:
+                         conditions.append(column == value)
+                else:
+                    # Log or raise error for invalid filter key
+                    pass # Or: logger.warning(f"Invalid filter key: {key}")
+
+            if conditions:
+                select_stmt = select_stmt.where(and_(*conditions))
+                count_stmt = count_stmt.where(and_(*conditions))
+
+        # Get total count before pagination
+        count_result = await self.db.execute(count_stmt)
+        total = count_result.scalar_one_or_none() or 0
+
+        # Apply ordering and pagination to the select statement
+        select_stmt = select_stmt.order_by(self.model.published_at.desc()).offset(skip).limit(limit)
+
+        result = await self.db.execute(select_stmt)
+        data = result.scalars().all()
+        return data, total
+
+    # Keep other specific methods like get_by_url, etc.
+    async def get_by_url(self, url: str) -> Optional[Article]:
+        """ Get an article by URL. """
         query = select(Article).where(Article.url == url)
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_by_feed_id(self, feed_id: uuid.UUID, skip: int = 0, limit: int = 100) -> List[Article]:
-        """
-        Get articles by feed ID.
-        
-        Args:
-            feed_id: Feed ID
-            skip: Number of articles to skip
-            limit: Maximum number of articles to return
-            
-        Returns:
-            List[Article]: List of articles
-        """
-        query = select(Article).where(Article.feed_id == feed_id).offset(skip).limit(limit)
-        result = await self.db.execute(query)
-        return result.scalars().all()
-
     async def get_recent_articles(
         self, days: int = 7, skip: int = 0, limit: int = 100
     ) -> List[Article]:
-        """
-        Get recent articles.
-        
-        Args:
-            days: Number of days to look back
-            skip: Number of articles to skip
-            limit: Maximum number of articles to return
-            
-        Returns:
-            List[Article]: List of recent articles
-        """
-        cutoff_date = datetime.utcnow() - datetime.timedelta(days=days)
+        """ Get recent articles. """
+        # Ensure timedelta is available
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
         query = select(Article).where(
             Article.published_at >= cutoff_date
         ).order_by(
@@ -81,47 +112,29 @@ class ArticleRepository(BaseRepository[Article, ArticleCreate, ArticleUpdate]):
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    # search_articles can potentially be merged into get_multi logic above
+    # If keeping separate:
     async def search_articles(
         self, search_term: str, skip: int = 0, limit: int = 100
     ) -> Tuple[List[Article], int]:
-        """
-        Search articles by content.
-        
-        Args:
-            search_term: Search term
-            skip: Number of articles to skip
-            limit: Maximum number of articles to return
-            
-        Returns:
-            Tuple[List[Article], int]: List of articles and total count
-        """
-        # Using PostgreSQL full-text search
+        """ Search articles by content. """
         search_query = f"%{search_term}%"
-        
-        # Count total results
-        count_query = select(func.count()).where(
-            or_(
-                Article.title.ilike(search_query),
-                Article.content.ilike(search_query)
-            )
+        search_filter = or_(
+            Article.title.ilike(search_query),
+            Article.content.ilike(search_query)
         )
+
+        count_query = select(func.count()).select_from(Article).where(search_filter)
         count_result = await self.db.execute(count_query)
-        total_count = count_result.scalar()
-        
-        # Get paginated results
-        query = select(Article).where(
-            or_(
-                Article.title.ilike(search_query),
-                Article.content.ilike(search_query)
-            )
-        ).order_by(
+        total_count = count_result.scalar_one_or_none() or 0
+
+        query = select(Article).where(search_filter).order_by(
             Article.published_at.desc()
         ).offset(skip).limit(limit)
-        
+
         result = await self.db.execute(query)
         return result.scalars().all(), total_count
-
-
+    
 class ArticleRelevanceRepository:
     """
     Repository for ArticleRelevance model operations.

@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { 
-  ArrowLeftIcon, 
+import {
+  ArrowLeftIcon,
   DocumentTextIcon,
   ShareIcon,
   PaperClipIcon,
   CheckIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
+import api from '../../api/client'; // Import your API client
+// import { Article as ArticleType } from '../../types'; // Import your Article type/interface
 
 const ArticleDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,56 +18,24 @@ const ArticleDetailPage: React.FC = () => {
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // Mock article data
-  const mockArticle = {
-    id: id || '1',
-    title: 'Introduction to Artificial Intelligence',
-    source: 'Tech News',
-    author: 'John Smith',
-    published_at: '2025-04-28T10:00:00.000Z',
-    content: `
-      <p>Artificial Intelligence (AI) is transforming industries across the board. From healthcare to finance, transportation to entertainment, AI technologies are revolutionizing how we live and work.</p>
-      
-      <p>Machine learning, a subset of AI, involves training algorithms to learn patterns from data and make predictions or decisions without explicit programming. Deep learning, a further specialized field, uses neural networks with multiple layers to process complex information.</p>
-      
-      <p>Natural Language Processing (NLP) enables computers to understand, interpret, and generate human language. This technology powers virtual assistants, chatbots, and translation services we use daily.</p>
-      
-      <p>Computer vision systems can interpret and understand visual information from the world, enabling applications like facial recognition, autonomous vehicles, and medical image analysis.</p>
-      
-      <p>While AI offers tremendous benefits, it also raises important ethical considerations regarding privacy, bias, job displacement, and security. As these technologies continue to advance, addressing these concerns will be crucial for responsible development.</p>
-    `,
-    url: 'https://example.com/ai-intro',
-    metadata: {
-      word_count: 156,
-      reading_time_minutes: 1.2,
-      entities: {
-        topics: ['Artificial Intelligence', 'Machine Learning', 'Deep Learning', 'NLP', 'Computer Vision', 'Ethics']
-      }
-    }
-  };
-
-  // Mock client profiles data
-  const mockClients = [
-    { id: '1', name: 'Tech Company', relevance_score: 0.95 },
-    { id: '2', name: 'Finance Corp', relevance_score: 0.68 },
-    { id: '3', name: 'Green Energy Startup', relevance_score: 0.32 }
-  ];
-
-  const { data: article, isLoading } = useQuery({
+  // Fetch real article data
+  const { data: article, isLoading, error } = useQuery<ArticleType>({
     queryKey: ['article', id],
-    queryFn: () => {
-      // Mock API call
-      console.log('Fetching article with id:', id);
-      return Promise.resolve(mockArticle);
-    },
+    queryFn: () => api.articles.getById(id as string), // Use actual API call
     enabled: !!id
   });
 
+  // Keep relevant clients mocked for now, or implement backend/API for it
   const { data: relevantClients } = useQuery({
     queryKey: ['article-clients', id],
     queryFn: () => {
-      // Mock API call
       console.log('Fetching relevant clients for article id:', id);
+       // Replace with actual API call when ready: e.g., api.articles.getRelevantClients(id as string)
+       const mockClients = [
+         { id: '1', name: 'Tech Company', relevance_score: 0.95 },
+         { id: '2', name: 'Finance Corp', relevance_score: 0.68 },
+         { id: '3', name: 'Green Energy Startup', relevance_score: 0.32 }
+       ];
       return Promise.resolve(mockClients);
     },
     enabled: !!id
@@ -73,8 +43,9 @@ const ArticleDetailPage: React.FC = () => {
 
   const shareMutation = useMutation({
     mutationFn: (data: { articleId: string; clientIds: string[] }) => {
-      // Mock API call
+      // TODO: Replace with actual API call
       console.log('Sharing article with clients:', data);
+       // return api.articles.shareWithClients(data.articleId, data.clientIds);
       return Promise.resolve(data);
     },
     onSuccess: () => {
@@ -88,8 +59,9 @@ const ArticleDetailPage: React.FC = () => {
 
   const analyzeMutation = useMutation({
     mutationFn: (articleId: string) => {
-      // Mock API call
+      // TODO: Replace with actual API call
       console.log('Analyzing article with id:', articleId);
+      // return api.articles.analyze(articleId);
       return Promise.resolve({ success: true });
     },
     onSuccess: () => {
@@ -132,33 +104,16 @@ const ArticleDetailPage: React.FC = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    // Loading state
+    return <div className="flex justify-center items-center h-64">...</div>;
   }
 
-  if (!article) {
-    return (
-      <div className="text-center py-12">
-        <h3 className="text-lg font-medium text-gray-900">Article not found</h3>
-        <p className="mt-2 text-sm text-gray-500">
-          The article you're looking for doesn't exist or you don't have access to it.
-        </p>
-        <div className="mt-6">
-          <Link
-            to="/articles"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-          >
-            <ArrowLeftIcon className="-ml-1 mr-2 h-5 w-5" />
-            Back to Articles
-          </Link>
-        </div>
-      </div>
-    );
+  if (error || !article) {
+     // Error or not found state
+    return <div className="text-center py-12">...</div>;
   }
 
+  // ---- RENDER ----
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -286,35 +241,47 @@ const ArticleDetailPage: React.FC = () => {
           </div>
 
           <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: article.content }} />
-          
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-500">Article Metadata</h3>
-            <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-gray-500">Word Count</dt>
-                <dd className="text-sm text-gray-900">{article.metadata.word_count} words</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Reading Time</dt>
-                <dd className="text-sm text-gray-900">{article.metadata.reading_time_minutes} min read</dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-xs text-gray-500">Topics</dt>
-                <dd className="text-sm text-gray-900">
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {article.metadata.entities.topics.map((topic, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                      >
-                        {topic}
-                      </span>
-                    ))}
+
+          {/* Metadata Section */}
+          {/* Check if meta_data exists and is an object before accessing properties */}
+          {article.meta_data && typeof article.meta_data === 'object' && Object.keys(article.meta_data).length > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="text-sm font-medium text-gray-500">Article Metadata</h3>
+              <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+                {/* Access using meta_data */}
+                {article.meta_data.word_count && (
+                  <div>
+                    <dt className="text-xs text-gray-500">Word Count</dt>
+                    <dd className="text-sm text-gray-900">{article.meta_data.word_count} words</dd>
                   </div>
-                </dd>
-              </div>
-            </dl>
-          </div>
+                )}
+                {article.meta_data.reading_time_minutes && (
+                  <div>
+                    <dt className="text-xs text-gray-500">Reading Time</dt>
+                    <dd className="text-sm text-gray-900">{article.meta_data.reading_time_minutes} min read</dd>
+                  </div>
+                )}
+                {/* Safely access nested topics */}
+                {article.meta_data.entities?.topics && Array.isArray(article.meta_data.entities.topics) && article.meta_data.entities.topics.length > 0 && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs text-gray-500">Topics</dt>
+                    <dd className="text-sm text-gray-900">
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {article.meta_data.entities.topics.map((topic, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                          >
+                            {topic}
+                          </span>
+                        ))}
+                      </div>
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+          )}
         </div>
       </div>
 

@@ -181,9 +181,7 @@ class FeedService:
                 if "<" in article_data["content"] and ">" in article_data["content"]:
                     article_data["content"] = clean_html(article_data["content"])
                 
-                article_data["metadata"] = extract_metadata(article_data["content"])
-                
-                # Create article
+                article_data["meta_data"] = extract_metadata(article_data["content"])
                 article_create = ArticleCreate(
                     feed_id=feed_id,
                     title=article_data["title"],
@@ -192,8 +190,10 @@ class FeedService:
                     published_at=article_data["published_at"],
                     author=article_data["author"],
                     content=article_data["content"],
-                    metadata=article_data["metadata"]
+                    meta_data=article_data["meta_data"]
                 )
+                
+                logger.info(f"ArticleCreate before repo.create: published_at type={type(article_create.published_at)}, value={article_create.published_at}")
                 
                 article = await self.article_repo.create(obj_in=article_create)
                 saved_articles.append(article)

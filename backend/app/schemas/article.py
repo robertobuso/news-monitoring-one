@@ -16,7 +16,7 @@ class ArticleBase(BaseModel):
     published_at: datetime
     author: Optional[str] = None
     content: str
-    metadata: Dict = {}
+    meta_data: Dict = {}
 
 
 class ArticleCreate(ArticleBase):
@@ -32,7 +32,7 @@ class ArticleUpdate(BaseModel):
     published_at: Optional[datetime] = None
     author: Optional[str] = None
     content: Optional[str] = None
-    metadata: Optional[Dict] = None
+    meta_data: Optional[Dict] = None
 
 
 class ArticleInDBBase(ArticleBase):
@@ -42,7 +42,9 @@ class ArticleInDBBase(ArticleBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        # Use this for Pydantic V2
+        from_attributes = True
+        # orm_mode = True # This is for Pydantic V1
 
 
 class Article(ArticleInDBBase):
@@ -82,7 +84,9 @@ class ArticleRelevanceInDBBase(ArticleRelevanceBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        # Use this for Pydantic V2
+        from_attributes = True
+        # orm_mode = True # This is for Pydantic V1
 
 
 class ArticleRelevance(ArticleRelevanceInDBBase):

@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
-  ArrowLeftIcon, 
+import {
+  ArrowLeftIcon,
   PencilIcon,
   TrashIcon,
   ArrowPathIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
-  XMarkIcon
+  XMarkIcon,
+  ChevronRightIcon // Import ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
+import api from '../../api/client';
+import { Feed, Article as ArticleType } from '../../types'; // Import Feed and Article types
 
 const FeedDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -21,75 +24,55 @@ const FeedDetailPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Mock feed data until API client is updated
-  const mockFeed = {
-    id: id || 'feed1',
-    name: 'Tech News',
-    url: 'https://example.com/rss',
-    type: 'rss',
-    check_frequency: 60,
-    is_active: true,
-    health_status: 'healthy',
-    last_checked: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-
-  const { data: feed, isLoading, error } = useQuery({
+  // Fetch feed details
+  const { data: feed, isLoading: isLoadingFeed, error: feedError } = useQuery<Feed>({ // Use Feed type
     queryKey: ['feed', id],
-    queryFn: () => {
-      // Mock API call
-      console.log('Fetching feed with id:', id);
-      return Promise.resolve(mockFeed);
-    },
+    queryFn: () => api.feeds.getById(id as string),
     enabled: !!id
   });
 
+  const { data: feedArticles, isLoading: isLoadingFeedArticles } = useQuery<ArticleType[]>({
+    queryKey: ['feedArticles', id],
+    queryFn: () => api.articles.getAll({ feed_id: id as string, limit: 15 }), // Fetch X articles for this feed
+    enabled: !!id // Only run if feed id exists
+  });
+
   const updateMutation = useMutation({
-    mutationFn: (data: any) => {
-      // Mock API call
-      console.log('Updating feed with data:', data);
-      return Promise.resolve({ ...mockFeed, ...data });
-    },
+    mutationFn: (data: any) => api.feeds.update(id as string, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed', id] });
       queryClient.invalidateQueries({ queryKey: ['feeds'] });
       setIsEditing(false);
       toast.success('Feed updated successfully');
     },
-    onError: () => {
-      toast.error('Failed to update feed');
+    onError: (error: any) => {
+      console.error('Error updating feed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to update feed');
     }
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => {
-      // Mock API call
-      console.log('Deleting feed with id:', id);
-      return Promise.resolve();
-    },
+    mutationFn: () => api.feeds.delete(id as string),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feeds'] });
       navigate('/feeds');
       toast.success('Feed deleted successfully');
     },
-    onError: () => {
-      toast.error('Failed to delete feed');
+    onError: (error: any) => {
+      console.error('Error deleting feed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to delete feed');
     }
   });
 
   const processMutation = useMutation({
-    mutationFn: () => {
-      // Mock API call
-      console.log('Processing feed with id:', id);
-      return Promise.resolve();
-    },
+    mutationFn: () => api.feeds.processFeed(id as string),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed', id] });
       toast.success('Feed processing started');
     },
-    onError: () => {
-      toast.error('Failed to process feed');
+    onError: (error: any) => {
+      console.error('Error processing feed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to process feed');
     }
   });
 
@@ -142,7 +125,22 @@ const FeedDetailPage: React.FC = () => {
     }
   };
 
-  if (isLoading) {
+    // Format date for display
+    const formatDate = (dateString: string | Date) => { // Accept Date object too
+      if (!dateString) return 'N/A';
+      return new Date(dateString).toLocaleDateString('en-US', {
+         year: 'numeric',
+         month: 'short',
+         day: 'numeric',
+         hour: '2-digit',
+         minute: '2-digit'
+      });
+   };
+
+  // Combined loading state
+  const isLoading = isLoadingFeed || processMutation.isPending || updateMutation.isPending;
+
+  if (isLoadingFeed && !feed) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -150,7 +148,7 @@ const FeedDetailPage: React.FC = () => {
     );
   }
 
-  if (error || !feed) {
+  if (feedError || !feed) {
     return (
       <div className="text-center py-12">
         <h3 className="text-lg font-medium text-gray-900">Feed not found</h3>
@@ -458,20 +456,66 @@ const FeedDetailPage: React.FC = () => {
       {/* Recent Articles */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="p-4 sm:p-6 border-b">
-          <h2 className="text-lg font-medium text-gray-900">Recent Articles</h2>
+          <h2 className="text-lg font-medium text-gray-900">Recent Articles From This Feed</h2>
         </div>
-        <div className="p-4 sm:p-6 text-center text-gray-500">
-          <p>No articles fetched yet.</p>
-          <button
-            onClick={() => processMutation.mutate()}
-            disabled={processMutation.isPending}
-            className="mt-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            <ArrowPathIcon className="-ml-1 mr-2 h-5 w-5" />
-            Process Feed Now
-          </button>
-        </div>
+
+        {isLoadingFeedArticles ? (
+           <div className="p-4 sm:p-6">
+            <div className="animate-pulse space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-16 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
+        ) : feedArticles && feedArticles.length > 0 ? (
+          <ul className="divide-y divide-gray-200">
+            {feedArticles.map((article) => ( // Use real feedArticles data
+              <li key={article.id}>
+                <Link
+                  to={`/articles/${article.id}`} // Link to article detail page
+                  className="block hover:bg-gray-50"
+                >
+                  <div className="px-4 py-4 sm:px-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 truncate">{article.title}</h3>
+                      <ChevronRightIcon className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <div className="mt-2 sm:flex sm:justify-between">
+                      <div className="sm:flex">
+                        <p className="flex items-center text-sm text-gray-500">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                             {article.source} {/* Display source from article */}
+                          </span>
+                          {article.author && (
+                            <span className="ml-2">by {article.author}</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
+                         <p>{formatDate(article.published_at)}</p> {/* Format date */}
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="p-4 sm:p-6 text-center text-gray-500">
+            {/* Updated message */}
+            <p>No articles found for this feed yet.</p>
+            <button
+              onClick={() => processMutation.mutate()}
+              disabled={processMutation.isPending}
+              className="mt-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              <ArrowPathIcon className="-ml-1 mr-2 h-5 w-5" />
+              Process Feed Now
+            </button>
+          </div>
+        )}
       </div>
+      {/* ------------------------------------------ */}
     </div>
   );
 };

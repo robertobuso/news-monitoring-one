@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, relationship
 
@@ -22,7 +22,7 @@ class NewsFeed(Base):
     name: Mapped[str] = Column(String, nullable=False)
     url: Mapped[str] = Column(String, nullable=False)
     type: Mapped[str] = Column(Enum("rss", "api", "web", name="feed_type"), nullable=False)
-    check_frequency: Mapped[int] = Column(String, nullable=False)  # in minutes
+    check_frequency: Mapped[int] = Column(Integer, nullable=False)  # in minutes
     is_active: Mapped[bool] = Column(Boolean, default=True)
     last_checked: Mapped[Optional[datetime]] = Column(DateTime)
     health_status: Mapped[str] = Column(Enum("healthy", "warning", "error", name="health_status"), default="healthy")
