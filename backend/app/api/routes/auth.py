@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from jose import JWTError
+from pydantic import ValidationError
 
 from app.api.deps import get_current_user
 from app.core.config import settings
@@ -30,23 +32,13 @@ from app.schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     user_in: UserCreate,
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """
     Register a new user.
-    
-    Args:
-        user_in: User registration data
-        db: Database session
-        
-    Returns:
-        UserResponse: Newly created user data
-        
-    Raises:
-        HTTPException: If email already exists
     """
     user_repo = UserRepository(db)
     
@@ -61,11 +53,23 @@ async def register(
     # Create new user
     user = await user_repo.create(user_in)
     
-    return UserResponse(
-        id=str(user.id),
-        email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
+    # Create tokens
+    access_token = create_access_token(
+        subject=str(user.id),
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    refresh_token = create_refresh_token(subject=str(user.id))
+    
+    return AuthResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        user=UserResponse(
+            id=str(user.id),
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+        ),
     )
 
 
@@ -76,16 +80,6 @@ async def login(
 ) -> Any:
     """
     Authenticate a user and return tokens.
-    
-    Args:
-        form_data: OAuth2 form with username (email) and password
-        db: Database session
-        
-    Returns:
-        AuthResponse: Access and refresh tokens with user data
-        
-    Raises:
-        HTTPException: If authentication fails
     """
     user_repo = UserRepository(db)
     

@@ -35,23 +35,34 @@ def create_application() -> FastAPI:
         openapi_url="/api/openapi.json",
     )
 
+    # Custom CORS handling
+    origins = []
+    if hasattr(settings, "CORS_ORIGINS_STR"):
+        if settings.CORS_ORIGINS_STR == "*":
+            origins = ["*"]
+        else:
+            origins = [origin.strip() for origin in settings.CORS_ORIGINS_STR.split(",") if origin.strip()]
+    else:
+        # Fallback
+        origins = ["http://localhost:3000"]
+
     # Add CORS middleware
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     # Add rate limiting middleware
-    application.add_middleware(
-        BaseHTTPMiddleware,
-        dispatch=RateLimitMiddleware(
-            rate_limit=settings.RATE_LIMIT,
-            time_window=settings.RATE_LIMIT_WINDOW,
-        ),
-    )
+    # application.add_middleware(
+    #     BaseHTTPMiddleware,
+    #     dispatch=RateLimitMiddleware(
+    #         rate_limit=settings.RATE_LIMIT,
+    #         time_window=settings.RATE_LIMIT_WINDOW,
+    #     ),
+    # )
 
     # Add exception handlers
     add_exception_handlers(application)

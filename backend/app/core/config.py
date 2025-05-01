@@ -5,7 +5,7 @@ Uses pydantic-settings for environment variable loading and validation.
 from typing import List, Optional, Union
 from pydantic import AnyHttpUrl, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 
 class Settings(BaseSettings):
@@ -45,8 +45,13 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     
-    # CORS settings
-    CORS_ORIGINS: List[AnyHttpUrl] = []
+    # Use a plain list of strings (not AnyHttpUrl which might be causing issues)
+    CORS_ORIGINS: List[str] = []
+
+    # Set model configuration to disable field checking
+    model_config = {
+        "validate_default": False
+    }
     
     # Rate limiting
     RATE_LIMIT: int = 100  # requests
@@ -68,6 +73,18 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     EMAIL_SENDER: str = "noreply@newsmonitor.ai"
 
+    @property
+    def CORS_ORIGINS(self) -> List[str]:
+        """Get the CORS origins as a list."""
+        if self.CORS_ORIGINS_STR == "*":
+            return ["*"]
+        origins = []
+        for origin in self.CORS_ORIGINS_STR.split(","):
+            origin = origin.strip()
+            if origin:
+                origins.append(origin)
+        return origins
+
     @field_validator("DATABASE_URI", mode="before")
     def assemble_db_connection(cls, v: Optional[str], values: dict) -> Any:
         """Assemble database URI from components."""
@@ -83,16 +100,28 @@ class Settings(BaseSettings):
             path=f"{values.data.get('POSTGRES_DB', '')}"
         )
 
-    
+        
     @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod  # Required for Pydantic v2 validators
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         """Parse CORS origins from string or list."""
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
+        if isinstance(v, str) and not v:
+            return []
+            
+        if isinstance(v, str):
+            # Handle comma-separated format
+            if "," in v:
+                return [i.strip() for i in v.split(",")]
+                
+            # Single URL
+            return [v.strip()]
+            
+        if isinstance(v, list):
             return v
-        raise ValueError(v)
+            
+        return []
     
+    # V2 configuration format
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

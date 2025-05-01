@@ -37,11 +37,18 @@ axiosInstance.interceptors.response.use(
 
 const api = {
   auth: {
+    // For login, you must use form data not JSON
     login: async (email: string, password: string) => {
-      const formData = new FormData();
-      formData.append('username', email);
+      // Create URLSearchParams instead of FormData
+      const formData = new URLSearchParams();
+      formData.append('username', email); // OAuth2 spec uses 'username'
       formData.append('password', password);
-      const response = await axiosInstance.post('/auth/login', formData);
+      
+      const response = await axiosInstance.post('/auth/login', formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
       return response.data;
     },
     register: async (userData: any) => {
