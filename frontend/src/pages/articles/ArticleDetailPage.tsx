@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Added useQueryClient
 import {
   ArrowLeftIcon,
   DocumentTextIcon,
@@ -17,15 +17,21 @@ const ArticleDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
+  
+  // Define useQueryClient instance
+  const queryClient = useQueryClient();
+
+  const { data: article, isLoading, error } = useQuery({
+    queryKey: ['article', id],
+    queryFn: () => api.articles.getById(id as string),
+    enabled: !!id
+  });
 
   const { data: relevantClients, isLoading: isLoadingClients, refetch: refetchClients } = useQuery({
     queryKey: ['article-clients', id],
     queryFn: () => api.articles.getRelevantClients(id as string),
     enabled: !!id
   });
-  
-  // Make sure to import queryClient if needed
-  const queryClient = useQueryClient();
 
   const shareMutation = useMutation({
     mutationFn: (data: { articleId: string; clientIds: string[] }) => {
@@ -113,12 +119,28 @@ const ArticleDetailPage: React.FC = () => {
 
   if (isLoading) {
     // Loading state
-    return <div className="flex justify-center items-center h-64">...</div>;
+    return <div className="flex justify-center items-center h-64">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    </div>;
   }
 
   if (error || !article) {
      // Error or not found state
-    return <div className="text-center py-12">...</div>;
+    return <div className="text-center py-12">
+      <h3 className="text-lg font-medium text-gray-900">Article not found</h3>
+      <p className="mt-2 text-sm text-gray-500">
+        The article you're looking for doesn't exist or you don't have access to it.
+      </p>
+      <div className="mt-6">
+        <Link
+          to="/articles"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+        >
+          <ArrowLeftIcon className="-ml-1 mr-2 h-5 w-5" />
+          Back to Articles
+        </Link>
+      </div>
+    </div>;
   }
 
   // ---- RENDER ----
@@ -172,32 +194,38 @@ const ArticleDetailPage: React.FC = () => {
                         Select clients to share this article with:
                       </p>
                       <div className="max-h-60 overflow-y-auto">
-                        <ul className="divide-y divide-gray-200">
-                          {relevantClients?.map((client) => (
-                            <li key={client.id} className="py-3">
-                              <div className="flex items-center">
-                                <input
-                                  id={`client-${client.id}`}
-                                  name={`client-${client.id}`}
-                                  type="checkbox"
-                                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                  checked={selectedClients.includes(client.id)}
-                                  onChange={() => toggleClientSelection(client.id)}
-                                />
-                                <label htmlFor={`client-${client.id}`} className="ml-3 block text-sm text-gray-700">
-                                  {client.name}
-                                  <span className={`ml-2 inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                                    client.relevance_score >= 0.8 ? 'bg-green-100 text-green-800' :
-                                    client.relevance_score >= 0.5 ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}>
-                                    {(client.relevance_score * 100).toFixed(0)}% relevant
-                                  </span>
-                                </label>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
+                        {isLoadingClients ? (
+                          <div className="py-4 text-center">Loading clients...</div>
+                        ) : relevantClients && relevantClients.length > 0 ? (
+                          <ul className="divide-y divide-gray-200">
+                            {relevantClients?.map((client) => (
+                              <li key={client.id} className="py-3">
+                                <div className="flex items-center">
+                                  <input
+                                    id={`client-${client.id}`}
+                                    name={`client-${client.id}`}
+                                    type="checkbox"
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                    checked={selectedClients.includes(client.id)}
+                                    onChange={() => toggleClientSelection(client.id)}
+                                  />
+                                  <label htmlFor={`client-${client.id}`} className="ml-3 block text-sm text-gray-700">
+                                    {client.name}
+                                    <span className={`ml-2 inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                                      client.relevance_score >= 0.8 ? 'bg-green-100 text-green-800' :
+                                      client.relevance_score >= 0.5 ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {(client.relevance_score * 100).toFixed(0)}% relevant
+                                    </span>
+                                  </label>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="py-4 text-center text-gray-500">No relevant clients found</div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -305,7 +333,12 @@ const ArticleDetailPage: React.FC = () => {
           </button>
         </div>
         <div className="border-t border-gray-200">
-          {relevantClients && relevantClients.length > 0 ? (
+          {isLoadingClients ? (
+            <div className="p-4 sm:p-6 text-center">
+              <div className="animate-spin inline-block h-8 w-8 border-t-2 border-b-2 border-blue-500 rounded-full"></div>
+              <p className="mt-2 text-gray-500">Loading clients...</p>
+            </div>
+          ) : relevantClients && relevantClients.length > 0 ? (
             <ul className="divide-y divide-gray-200">
               {relevantClients
                 .sort((a, b) => b.relevance_score - a.relevance_score)

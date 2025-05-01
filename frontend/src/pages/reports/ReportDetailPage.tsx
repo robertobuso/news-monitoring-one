@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Added useQueryClient
 import { 
   ArrowLeftIcon, 
   ArrowDownTrayIcon,
@@ -9,10 +9,12 @@ import {
   DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
+import api from '../../api/client'; // Added missing import
 
 const ReportDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient(); // Added missing queryClient initialization
   const [showSendModal, setShowSendModal] = useState(false);
   const [email, setEmail] = useState('');
 
@@ -249,32 +251,38 @@ const ReportDetailPage: React.FC = () => {
           </p>
         </div>
         <div className="border-t border-gray-200">
-          <ul className="divide-y divide-gray-200">
-            {report.articles.map((article) => (
-              <li key={article.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50">
-                <Link to={`/articles/${article.id}`} className="block">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-blue-600">{article.title}</p>
-                    <div className="ml-2 flex-shrink-0 flex">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        article.relevance_score > 0.8 ? 'bg-green-100 text-green-800' :
-                        article.relevance_score > 0.6 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {(article.relevance_score * 100).toFixed(0)}% relevant
-                      </span>
+          {report.articles && report.articles.length > 0 ? (
+            <ul className="divide-y divide-gray-200">
+              {report.articles.map((article) => (
+                <li key={article.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                  <Link to={`/articles/${article.id}`} className="block">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-blue-600">{article.title}</p>
+                      <div className="ml-2 flex-shrink-0 flex">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          article.relevance_score > 0.8 ? 'bg-green-100 text-green-800' :
+                          article.relevance_score > 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {(article.relevance_score * 100).toFixed(0)}% relevant
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-2">
-                    <p className="text-sm text-gray-500">{article.summary}</p>
-                    <div className="mt-2 flex items-center text-xs text-gray-500">
-                      <span>{article.source} • {new Date(article.published_at).toLocaleDateString()}</span>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500">{article.summary}</p>
+                      <div className="mt-2 flex items-center text-xs text-gray-500">
+                        <span>{article.source} • {new Date(article.published_at).toLocaleDateString()}</span>
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>No articles included in this report.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

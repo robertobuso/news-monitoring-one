@@ -37,13 +37,18 @@ def create_application() -> FastAPI:
 
     # Custom CORS handling
     origins = []
-    if hasattr(settings, "CORS_ORIGINS_STR"):
-        if settings.CORS_ORIGINS_STR == "*":
+    
+    # Check if CORS_ORIGINS exists directly as a property
+    if hasattr(settings, "CORS_ORIGINS"):
+        origins = settings.CORS_ORIGINS
+    # Fallback to parsing CORS_ORIGINS if available
+    elif hasattr(settings, "CORS_ORIGINS"):
+        if settings.CORS_ORIGINS == "*":
             origins = ["*"]
         else:
-            origins = [origin.strip() for origin in settings.CORS_ORIGINS_STR.split(",") if origin.strip()]
+            origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
     else:
-        # Fallback
+        # Default fallback
         origins = ["http://localhost:3000"]
 
     # Add CORS middleware

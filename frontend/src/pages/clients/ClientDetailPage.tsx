@@ -8,7 +8,8 @@ import {
   NewspaperIcon,
   ArrowLeftIcon,
   CheckIcon,
-  XMarkIcon
+  XMarkIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import api from '../../api/client';
@@ -17,7 +18,7 @@ import ClientProfileForm from '../../components/client-profiles/ClientProfileFor
 const ClientDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient(); 
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 

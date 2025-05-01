@@ -27,6 +27,9 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Log the error for debugging
+    console.error('API Error:', error.response?.status, error.response?.data || error.message);
+    
     if (error.response?.status === 401) {
       // Redirect to login if unauthorized
       localStorage.removeItem('token');

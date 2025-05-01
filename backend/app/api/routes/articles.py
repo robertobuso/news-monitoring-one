@@ -99,36 +99,49 @@ async def get_article_source_stats(
     Args:
         db: Database session
         current_user: Current authenticated user
-        days: Number of days to include in stats (default: 30)
+        days: Number of days to include in stats
         
     Returns:
         Dict: Source statistics
     """
-    from sqlalchemy import func, and_
+    from sqlalchemy import func, and_, select
     from datetime import datetime, timedelta
+    from app.models.article import Article  # Explicit import
+    import logging
+    
+    logger = logging.getLogger(__name__)
     
     # Calculate date range
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
     
-    # Query to count articles by source within date range
-    query = (
-        select(Article.source, func.count(Article.id).label("count"))
-        .where(
-            and_(
-                Article.published_at >= start_date,
-                Article.published_at <= end_date
+    try:
+        # Query to count articles by source within date range
+        query = (
+            select(Article.source, func.count(Article.id).label("count"))
+            .where(
+                and_(
+                    Article.published_at >= start_date,
+                    Article.published_at <= end_date
+                )
             )
+            .group_by(Article.source)
+            .order_by(func.count(Article.id).desc())
         )
-        .group_by(Article.source)
-        .order_by(func.count(Article.id).desc())
-    )
-    
-    result = await db.execute(query)
-    sources = [{"source": row[0], "count": row[1]} for row in result.fetchall()]
-    
-    return {
-        "success": True,
-        "days": days,
-        "sources": sources
-    }
+        
+        result = await db.execute(query)
+        sources = [{"source": row[0], "count": row[1]} for row in result.fetchall()]
+        
+        return {
+            "success": True,
+            "days": days,
+            "sources": sources
+        }
+    except Exception as e:
+        logger.error(f"Error getting article source stats: {e}")
+        # Return a graceful error response
+        return {
+            "success": False,
+            "error": str(e),
+            "sources": []
+        }

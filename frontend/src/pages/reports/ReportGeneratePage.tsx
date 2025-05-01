@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'; // Added useQueryClient
 import { ArrowLeftIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
+import api from '../../api/client'; // Ensure api is imported
 
 const ReportGeneratePage: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient(); // Added queryClient initialization
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: clients, isLoading: isLoadingClients } = useQuery({
@@ -30,6 +32,8 @@ const ReportGeneratePage: React.FC = () => {
     },
     onSuccess: (data) => {
       toast.success('Report generation started');
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       // Wait for a moment before navigating to reports page since generation is async
       setTimeout(() => {
         navigate('/reports');
