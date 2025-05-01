@@ -3,6 +3,7 @@
 backend/.env
 frontend/.env
 backend/venv_news/
+backend/venv/
 venv_news/
 venv/
 

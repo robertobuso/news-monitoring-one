@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api.routes import auth
+from app.api.routes import auth, clients, feeds, articles, relevance, reports
 from app.core.config import settings
 from app.middleware.error_handlers import add_exception_handlers
 from app.middleware.rate_limiter import RateLimitMiddleware
@@ -56,8 +56,13 @@ def create_application() -> FastAPI:
     # Add exception handlers
     add_exception_handlers(application)
 
-    # Include routers
+    # Include routers with proper prefix
     application.include_router(auth.router, prefix="/api/v1")
+    application.include_router(clients.router, prefix="/api/v1")
+    application.include_router(feeds.router, prefix="/api/v1")
+    application.include_router(articles.router, prefix="/api/v1")
+    application.include_router(relevance.router, prefix="/api/v1")
+    application.include_router(reports.router, prefix="/api/v1")
 
     @application.get("/api/health", tags=["Health"])
     async def health_check():

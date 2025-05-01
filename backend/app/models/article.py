@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy import text
 
 from app.db.base import Base
 
@@ -26,7 +27,9 @@ class Article(Base):
     published_at: Mapped[datetime] = Column(DateTime, nullable=False)
     author: Mapped[Optional[str]] = Column(String)
     content: Mapped[str] = Column(Text, nullable=False)
-    metadata: Mapped[Dict] = Column(JSONB, default={})
+    
+    # Changed from 'metadata' to 'meta_data' to avoid conflict with SQLAlchemy's reserved name
+    meta_data: Mapped[Dict] = Column(JSONB, default={})
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -38,10 +41,11 @@ class Article(Base):
         """String representation of the Article model."""
         return f"<Article {self.title}>"
 
-    # Create indexes
+    # Create indexes with proper operator class
     __table_args__ = (
-        # GIN index for full-text search
-        Index("ix_articles_content_gin", "content", postgresql_using="gin"),
+        # GIN index for full-text search - add gin_trgm_ops operator class
+        Index("ix_articles_content_gin", text("content gin_trgm_ops"), postgresql_using="gin"),
+        
         # B-tree index on published_at for efficient date filtering
         Index("ix_articles_published_at", "published_at"),
     )

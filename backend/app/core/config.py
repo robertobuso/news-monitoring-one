@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     
     # API settings
     API_PREFIX: str = "/api/v1"
+    BASE_URL: str = "http://localhost:8000"
     
     # Security settings
     SECRET_KEY: str
@@ -35,10 +36,14 @@ class Settings(BaseSettings):
     DATABASE_URI: Optional[PostgresDsn] = None
     
     # Redis settings
-    REDIS_HOST: str = "redis"
+    REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
+    
+    # Celery settings
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     
     # CORS settings
     CORS_ORIGINS: List[AnyHttpUrl] = []
@@ -47,6 +52,22 @@ class Settings(BaseSettings):
     RATE_LIMIT: int = 100  # requests
     RATE_LIMIT_WINDOW: int = 60  # seconds
     
+    # LLM settings
+    LLM_PROVIDER: str = "openai"  # openai, claude, gemini
+    LLM_MODEL: str = "gpt-4"  # model name, depends on provider
+    
+    # API keys
+    OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    GOOGLE_API_KEY: Optional[str] = None
+    
+    # Email settings
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: Optional[int] = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    EMAIL_SENDER: str = "noreply@newsmonitor.ai"
+
     @field_validator("DATABASE_URI", mode="before")
     def assemble_db_connection(cls, v: Optional[str], values: dict) -> Any:
         """Assemble database URI from components."""

@@ -3,7 +3,7 @@ API routes for report management.
 """
 import uuid
 from datetime import datetime, date
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from fastapi.responses import FileResponse
@@ -235,3 +235,78 @@ async def get_reports_by_client(
         )
         
     return result["reports"]
+
+@router.post("/{report_id}/send", status_code=status.HTTP_200_OK)
+async def send_report(
+    report_id: uuid.UUID,
+    email_data: Dict[str, str],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Send a report via email.
+    
+    Args:
+        report_id: Report ID
+        email_data: Email data (recipient email)
+        db: Database session
+        current_user: Current authenticated user
+        
+    Returns:
+        dict: Send result
+    """
+    from app.services.email_service import EmailService
+    
+    report_service = ReportService(db)
+    result = await report_service.get_report_by_id(report_id, current_user.id)
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=result["message"]
+        )
+    
+    report = result["report"]
+    client_profile = result["client_profile"]
+    
+    # Check if the report is ready to be sent
+    if report.status not in ["ready", "sent"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Report is not ready to be sent"
+        )
+    
+    # Check if the email is provided
+    if "email" not in email_data or not email_data["email"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is required"
+        )
+    
+    # Send the report
+    email_service = EmailService()
+    send_result = await email_service.send_report_email(
+        user_email=email_data["email"],
+        client_name=client_profile.name,
+        report_date=report.report_date,
+        pdf_path=report.pdf_path,
+        report_id=str(report.id)
+    )
+    
+    if not send_result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=send_result.get("error", "Failed to send report")
+        )
+    
+    # Update report status and recipient email
+    await report_service.report_repo.update_status(
+        report_id=report_id,
+        status="sent",
+        recipient_email=email_data["email"]
+    )
+    
+    return {
+        "success": True,
+        "message": f"Report sent to {email_data['email']}"
+    }

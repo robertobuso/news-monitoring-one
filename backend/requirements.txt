@@ -18,6 +18,7 @@ python-multipart>=0.0.6
 pydantic>=2.4.2
 pydantic-settings>=2.0.3
 python-dotenv>=1.0.0
+nltk>=3.8.1
 
 # Middleware and utilities
 starlette>=0.27.0
@@ -29,6 +30,20 @@ httpx>=0.25.1
 # LLM Integration
 langchain>=0.0.335
 langchain-community>=0.0.10
+langchain-openai>=0.0.2
+langchain-anthropic>=0.0.3
+langchain-google-genai>=0.0.3
+beautifulsoup4>=4.12.2
+
+# Web scraping and RSS parsing
+feedparser>=6.0.10
+playwright>=1.40.0
+
+# Email
+sendgrid>=6.10.0
+
+# PDF generation
+reportlab>=4.0.7
 
 # Testing
 pytest>=7.4.3

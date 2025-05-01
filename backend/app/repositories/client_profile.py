@@ -82,3 +82,15 @@ class ClientProfileRepository(BaseRepository[ClientProfile, ClientProfileCreate,
         await self.db.commit()
         await self.db.refresh(db_obj)
         return db_obj
+    
+    async def get_all_active(self) -> List[ClientProfile]:
+        """
+        Get all active client profiles across all users.
+        This is particularly useful for batch processing articles for relevance.
+        
+        Returns:
+            List[ClientProfile]: List of all active client profiles
+        """
+        query = select(ClientProfile).where(ClientProfile.is_active == True)
+        result = await self.db.execute(query)
+        return result.scalars().all()

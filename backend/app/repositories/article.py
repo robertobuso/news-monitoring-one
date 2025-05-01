@@ -3,7 +3,7 @@ Article repository for article-related database operations.
 """
 import uuid
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -253,3 +253,91 @@ class ArticleRelevanceRepository:
             await self.db.delete(obj)
             await self.db.commit()
         return obj
+    
+    async def get_unprocessed_articles(self, limit: int = 50) -> List[Article]:
+        """
+        Get articles that haven't been processed for relevance yet.
+        
+        Args:
+            limit: Maximum number of articles to return
+            
+        Returns:
+            List[Article]: List of unprocessed articles
+        """
+        # Find articles that don't have any relevance records
+        # This requires a LEFT JOIN with article_relevances
+        from sqlalchemy import outerjoin, func
+        from app.models.article_relevance import ArticleRelevance
+        
+        query = select(Article).outerjoin(
+            ArticleRelevance, 
+            Article.id == ArticleRelevance.article_id
+        ).group_by(
+            Article.id
+        ).having(
+            func.count(ArticleRelevance.id) == 0
+        ).limit(limit)
+        
+        result = await self.db.execute(query)
+        return result.scalars().all()
+
+    async def get_by_client_id_and_date_range(
+        self, 
+        client_id: uuid.UUID,
+        date_from: Optional[Union[datetime, str]] = None,
+        date_to: Optional[Union[datetime, str]] = None,
+        min_score: float = 0.0,
+        is_included: Optional[bool] = None,
+        limit: int = 50
+    ) -> List[ArticleRelevance]:
+        """
+        Get article relevances by client ID and date range.
+        
+        Args:
+            client_id: Client ID
+            date_from: Optional start date filter
+            date_to: Optional end date filter
+            min_score: Minimum relevance score
+            is_included: Optional filter for included status
+            limit: Maximum number of article relevances to return
+            
+        Returns:
+            List[ArticleRelevance]: List of article relevances
+        """
+        from sqlalchemy import and_
+        from app.models.article import Article
+        
+        # Convert string dates to datetime if needed
+        if isinstance(date_from, str):
+            date_from = datetime.fromisoformat(date_from)
+        if isinstance(date_to, str):
+            date_to = datetime.fromisoformat(date_to)
+        
+        # Build query conditions
+        conditions = [ArticleRelevance.client_id == client_id]
+        
+        if min_score > 0:
+            conditions.append(ArticleRelevance.relevance_score >= min_score)
+        
+        if is_included is not None:
+            conditions.append(ArticleRelevance.is_included == is_included)
+        
+        # Join with Article to apply date filters
+        query = select(ArticleRelevance).join(
+            Article, 
+            ArticleRelevance.article_id == Article.id
+        )
+        
+        # Add date filters if provided
+        if date_from:
+            query = query.where(Article.published_at >= date_from)
+        if date_to:
+            query = query.where(Article.published_at <= date_to)
+        
+        # Add other conditions and ordering
+        query = query.where(and_(*conditions)).order_by(
+            ArticleRelevance.relevance_score.desc()
+        ).limit(limit)
+        
+        result = await self.db.execute(query)
+        return result.scalars().all()

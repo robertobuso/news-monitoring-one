@@ -28,15 +28,16 @@ class AIService:
     Service for coordinating AI operations on articles.
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, llm_service: Optional[LLMService] = None):
         """
         Initialize AI service with database session.
         
         Args:
             db: Database session
+            llm_service: Optional LLM service to use (creates a new one if not provided)
         """
         self.db = db
-        self.llm_service = LLMService()
+        self.llm_service = llm_service or LLMService()
         self.relevance_service = RelevanceService(db, self.llm_service)
         self.summarization_service = SummarizationService(db, self.llm_service)
         self.article_repo = ArticleRepository(db)
@@ -59,12 +60,11 @@ class AIService:
         
         # Extract entities from article content
         entities = extract_entities_from_text(article.content)
-        
-        # Update article metadata with entities
-        metadata = article.metadata or {}
-        metadata["entities"] = entities
-        await self.article_repo.update(db_obj=article, obj_in={"metadata": metadata})
-        
+
+        # Update article meta_data with entities (changed from metadata to meta_data)
+        meta_data = article.meta_data or {}
+        meta_data["entities"] = entities
+        await self.article_repo.update(db_obj=article, obj_in={"meta_data": meta_data})
         # Process article relevance for all active client profiles
         relevance_results = await self.relevance_service.process_article_relevance(article_id)
         
@@ -96,13 +96,13 @@ class AIService:
         Returns:
             List[Dict]: List of relevant articles with their relevance data
         """
-        # Get relevance data for client
-        relevances = await self.article_relevance_repo.get_by_client_id(
+        # Get relevance data for client with the minimum score filter
+        relevances = await self.article_relevance_repo.get_by_client_id_and_date_range(
             client_id=client_id, 
-            min_score=min_score,
-            limit=limit,
             date_from=date_from,
-            date_to=date_to
+            date_to=date_to,
+            min_score=min_score,
+            limit=limit
         )
         
         results = []
@@ -143,18 +143,41 @@ class AIService:
             if not client_profile:
                 return {"success": False, "message": "Client profile not found"}
         
-        summary = await self.summarization_service.generate_article_summary(
-            article=article,
-            client_profile=client_profile,
-            max_length=max_length
-        )
+        # Generate the summary using the LLM service
+        context = None
+        if client_profile:
+            context = (f"This summary is for a client in the {client_profile.industry} industry. "
+                      f"The client is interested in: {', '.join(client_profile.keywords)}.")
         
-        return {
-            "success": True,
-            "article_id": str(article_id),
-            "client_id": str(client_id) if client_id else None,
-            "summary": summary
-        }
+        try:
+            summary = await self.llm_service.generate_summary(
+                text=article.content,
+                max_length=max_length,
+                context=context
+            )
+            
+            # If we have a client, store this summary in article relevance
+            if client_profile:
+                relevance = await self.article_relevance_repo.get_by_article_and_client(
+                    article_id=article_id,
+                    client_id=client_id
+                )
+                
+                if relevance:
+                    await self.article_relevance_repo.update(
+                        db_obj=relevance,
+                        obj_in={"summary": summary}
+                    )
+            
+            return {
+                "success": True,
+                "article_id": str(article_id),
+                "client_id": str(client_id) if client_id else None,
+                "summary": summary
+            }
+        except Exception as e:
+            logger.error(f"Error generating article summary: {e}")
+            return {"success": False, "message": f"Error generating summary: {str(e)}"}
 
     async def generate_executive_summary(
         self,
@@ -195,15 +218,96 @@ class AIService:
         if not articles:
             return {"success": False, "message": "No articles found for summary"}
         
-        executive_summary = await self.summarization_service.generate_executive_summary(
-            articles=articles,
-            client_profile=client_profile,
-            max_length=max_length
-        )
+        # Generate individual summaries for all articles first
+        article_texts = []
+        for article in articles:
+            # Try to get existing relevance summary
+            relevance = await self.article_relevance_repo.get_by_article_and_client(
+                article_id=article.id,
+                client_id=client_id
+            )
+            
+            if relevance and relevance.summary:
+                summary = relevance.summary
+            else:
+                # Generate a new summary
+                summary_result = await self.generate_article_summary(
+                    article_id=article.id,
+                    client_id=client_id,
+                    max_length=100  # Shorter summaries for executive summary input
+                )
+                summary = summary_result.get("summary", "No summary available")
+            
+            article_texts.append(f"Title: {article.title}\nDate: {article.published_at.isoformat()}\nSummary: {summary}")
         
-        return {
+        # Generate the executive summary
+        # Combine all article texts with client profile information
+        context = (f"Client: {client_profile.name}\n"
+                   f"Industry: {client_profile.industry}\n"
+                   f"Keywords: {', '.join(client_profile.keywords)}")
+        
+        full_text = f"{context}\n\n" + "\n\n".join(article_texts)
+        
+        try:
+            prompt = f"""
+            Based on the following collection of article summaries, create an executive summary 
+            specifically tailored for this client. Focus on insights relevant to their industry 
+            and interests. The summary should highlight key developments, trends, and potential 
+            business implications.
+            
+            {full_text}
+            
+            Create a cohesive, well-structured executive summary of approximately {max_length} words 
+            that synthesizes the most important information for this client. Focus on actionable 
+            insights and strategic implications.
+            """
+            
+            exec_summary_result = await self.llm_service.call_llm(prompt)
+            
+            if not exec_summary_result["success"]:
+                raise Exception(exec_summary_result.get("error", "Unknown error"))
+                
+            executive_summary = exec_summary_result["response"].strip()
+            
+            return {
+                "success": True,
+                "client_id": str(client_id),
+                "article_count": len(articles),
+                "executive_summary": executive_summary
+            }
+        except Exception as e:
+            logger.error(f"Error generating executive summary: {e}")
+            return {"success": False, "message": f"Error generating executive summary: {str(e)}"}
+        
+    async def process_daily_articles(self) -> Dict[str, Any]:
+        """
+        Process all unprocessed articles to evaluate relevance for all client profiles.
+        
+        Returns:
+            Dict: Processing results
+        """
+        # Get unprocessed articles (those without relevance evaluations)
+        article_repo = ArticleRepository(self.db)
+        unprocessed_articles = await article_repo.get_unprocessed_articles(limit=50)
+        
+        results = {
             "success": True,
-            "client_id": str(client_id),
-            "article_count": len(articles),
-            "executive_summary": executive_summary
+            "processed_count": 0,
+            "error_count": 0,
+            "article_ids": []
         }
+        
+        for article in unprocessed_articles:
+            try:
+                result = await self.process_article(article.id)
+                if result["success"]:
+                    results["processed_count"] += 1
+                    results["article_ids"].append(str(article.id))
+                else:
+                    results["error_count"] += 1
+                    logger.error(f"Error processing article {article.id}: {result.get('message')}")
+            except Exception as e:
+                results["error_count"] += 1
+                logger.error(f"Exception processing article {article.id}: {e}")
+        
+        return results
